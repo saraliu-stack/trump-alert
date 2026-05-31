@@ -4,7 +4,7 @@
 &nbsp;
 [![Use this template](https://img.shields.io/badge/Use_this_template-2ea44f?style=flat-square&logo=github&logoColor=white)](https://github.com/saraliu-stack/trump-alert/generate)
 &nbsp;
-![GitHub Stars](https://img.shields.io/github/stars/saraliu-stack/trump-alert?style=social)
+[![GitHub Stars](https://img.shields.io/github/stars/saraliu-stack/trump-alert?style=social)](https://github.com/saraliu-stack/trump-alert/stargazers)
 
 > **⚠️ Informational only. Not financial advice.** See [Legal Disclaimer](#️-legal-disclaimer).
 
