@@ -133,6 +133,81 @@ Example queries that would have caught documented misses:
 Treat WebSearch results the same as B2 — tag as 🎤, include in the merged post list,
 fact-check normally in Step 2.
 
+**Source D — last30days community research (catches everything else):**
+```bash
+python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_last30days.py" [OPTIONS]
+```
+Source D covers events that are **not on Truth Social, not on whitehouse.gov, and not in
+a scheduled video** — the hardest category to catch. Examples:
+
+| Event type | Example | Why Sources A–C miss it |
+|---|---|---|
+| Fox News phone call | Micron "one of the hottest companies" (Mar 26) | Not on WH site; no Truth Social post |
+| Reporter hallway scrum | "Great company, great company" to press pool | No transcript published anywhere |
+| Cabinet / CEO meeting | Unscheduled praise after private meeting | Covered only in news follow-up |
+| Rally ad-lib not in script | Off-script company praise at rally | Official rally transcript omits it |
+| CNBC / Bloomberg TV interview | Unscripted company mention | Sometimes not picked up by financial RSS |
+
+**How Source D works:** runs the last30days engine against Reddit RSS feeds (keyless —
+no API key needed). Finance/investing subreddits (r/stocks, r/wallstreetbets, r/investing,
+r/StockMarket) post "Trump just mentioned [company] on Fox" within **minutes** of any
+TV appearance. The engine clusters those posts and returns company mentions with URLs.
+Results are tagged 🔍 in the digest.
+
+**Interactive last30days skill layer (Claude-run only — most comprehensive):**
+
+When you (Claude) are running `/trump-alert` interactively, you can also invoke the
+last30days skill directly with full WebSearch access, which goes beyond Reddit to cover
+news articles, niche outlets, and financial blogs. Generate the query plan below, write
+it to a tmp file, and run the engine:
+
+```python
+# Query plan — write to tempfile and pass as --plan arg
+QUERY_PLAN = {
+  "intent": "breaking_news",
+  "freshness_mode": "strict_recent",
+  "cluster_mode": "story",
+  "raw_topic": "Trump company stock mention praise event interview rally press conference",
+  "subqueries": [
+    {
+      "label": "Trump Fox News interview company praise",
+      "search_query": "Trump praised company stock buy Fox News phone call interview 2026",
+      "ranking_query": "Trump explicitly praises or recommends a company in a media interview or phone call",
+      "sources": ["grounding", "reddit"],
+      "weight": 1.0
+    },
+    {
+      "label": "Trump hallway scrum or press pool company mention",
+      "search_query": "Trump told reporters company stock great said hallway press pool 2026",
+      "ranking_query": "Trump praises a company in an informal press setting not covered by official transcript",
+      "sources": ["grounding", "reddit"],
+      "weight": 0.9
+    },
+    {
+      "label": "Trump CEO meeting company stock",
+      "search_query": "Trump met CEO praised company stock endorsed White House 2026",
+      "ranking_query": "Trump praises a company after or during a CEO meeting",
+      "sources": ["grounding", "reddit"],
+      "weight": 0.8
+    }
+  ],
+  "source_weights": {"grounding": 1.0, "reddit": 0.8},
+  "notes": ["Focus on non-whitehouse.gov non-Truth-Social events only"]
+}
+```
+
+```bash
+python "C:\Users\saral\.claude\skills\last30days\scripts\last30days.py" \
+  "Trump company mention event interview Fox News 2026" \
+  --plan /tmp/trump_company_plan.json \
+  --emit=compact
+```
+
+Read the `## Ranked Evidence Clusters` output. For each cluster that mentions a company
+by name, extract: company name → ticker (via COMPANY_MAP), signal type (buy/warn/neutral),
+context snippet, and URL. Tag as source 🔍 **Community/Research**, merge with the other
+sources, and fact-check normally in Step 2.
+
 ### Step 2: Fact-check each mention
 
 For each mention returned by the script, use WebSearch to verify the claim.
@@ -286,8 +361,9 @@ Always open the response with a summary line before listing alerts:
 ```
 🔍 Trump Company Alert Scan — Last {N} hours
    📱 Truth Social: {X} posts scanned
-   🎤 Speeches/Events: {Y} items scanned
-   📰 News headlines: {N2} Trump+company stories matched
+   🎤 Speeches/Events: {Y} transcripts  +  {Y2} speech news reports
+   📰 Financial news: {N2} Trump+company stories matched
+   🔍 Community research: {N3} Reddit/forum mentions (Fox calls, press scrums, off-camera)
    ─── {Z} company mentions found  |  {W} BUY alerts ───
    Data freshness: {ARCHIVE_TIMESTAMP}
    ─────────────────────────────────────────────────────
@@ -296,7 +372,7 @@ Always open the response with a summary line before listing alerts:
 If zero mentions found:
 ```
 ✅ No company or ticker mentions found in Trump's last {N} hours.
-   📱 {X} Truth Social posts + 🎤 {Y} speeches/events + 📰 {N2} news stories scanned.
+   📱 {X} Truth Social  +  🎤 {Y} WH speeches  +  📰 {N2} news  +  🔍 {N3} community research scanned.
    Data as of {ARCHIVE_TIMESTAMP}.
 ```
 

@@ -165,11 +165,17 @@ def build_digest(days, include_prices=True):
     for post in news_data.get("posts", []):
         post.setdefault("source", "news")
 
+    print("[run_daily] Fetching Source D: last30days Reddit research (Fox calls, press scrums, off-camera)...", file=sys.stderr)
+    l30d_data = run_script("fetch_last30days.py", scan_args) or {"total_matched": 0, "posts": []}
+    for post in l30d_data.get("posts", []):
+        post.setdefault("source", "last30days")
+
     all_posts = (
         ts_data.get("posts", [])
         + wh_data.get("posts", [])
         + wh_supp_data.get("posts", [])
         + news_data.get("posts", [])
+        + l30d_data.get("posts", [])
     )
 
     # ---- Collect all company mentions ----
@@ -183,6 +189,8 @@ def build_digest(days, include_prices=True):
             source_type = "🎤"
         elif src == "news":
             source_type = "📰"
+        elif src == "last30days":
+            source_type = "🔍"
         else:
             source_type = "📱"
         url = post.get("url", "")
@@ -251,6 +259,7 @@ def build_digest(days, include_prices=True):
         "wh_meta": wh_data.get("meta", {}),
         "wh_supp_count": wh_supp_data.get("total_matched", 0),
         "news_count": news_data.get("total_matched", 0),
+        "l30d_count": l30d_data.get("total_matched", 0),
         "company_mentions": company_mentions,
         "price_data": price_data,
         "price_timestamp": price_timestamp,
@@ -268,6 +277,7 @@ def format_digest_text(digest):
     wh_meta = digest["wh_meta"]
     wh_supp_count = digest.get("wh_supp_count", 0)
     news_count = digest.get("news_count", 0)
+    l30d_count = digest.get("l30d_count", 0)
     companies = digest["company_mentions"]
     prices = digest["price_data"]
     price_ts = digest.get("price_timestamp", "unknown")
@@ -282,6 +292,8 @@ def format_digest_text(digest):
     lines.append(f"  🎤 WH Speeches: {wh_meta.get('total_scanned', '?')} transcripts"
                  f"  +  {wh_supp_count} speech news reports")
     lines.append(f"  📰 Financial news: {news_count} Trump+company stories matched")
+    lines.append(f"  🔍 Community research: {l30d_count} Reddit/forum mentions found"
+                 f"  (Fox calls, press scrums, off-camera)")
     lines.append("=" * 60)
 
     # ---- BUY ALERTS ----
@@ -418,7 +430,7 @@ def format_digest_html(digest):
 <div class="header">
   <h1 style="color:#ff4444;margin:0">📊 TRUMP MARKET ALERT</h1>
   <p style="margin:4px 0;color:#aaa">Daily Digest · {digest['scan_time'][:16].replace('T',' ')} UTC · Last {digest['days']} days</p>
-  <p style="margin:2px 0;color:#888;font-size:11px">📱 {digest['ts_meta'].get('total_scanned','?')} Truth Social &nbsp;·&nbsp; 🎤 {digest['wh_meta'].get('total_scanned','?')} WH transcripts + {digest.get('wh_supp_count',0)} speech news reports &nbsp;·&nbsp; 📰 {digest.get('news_count',0)} financial news</p>
+  <p style="margin:2px 0;color:#888;font-size:11px">📱 {digest['ts_meta'].get('total_scanned','?')} Truth Social &nbsp;·&nbsp; 🎤 {digest['wh_meta'].get('total_scanned','?')} WH transcripts + {digest.get('wh_supp_count',0)} speech news &nbsp;·&nbsp; 📰 {digest.get('news_count',0)} financial news &nbsp;·&nbsp; 🔍 {digest.get('l30d_count',0)} community research</p>
 </div>
 
 {"<div class='buy-alert'><h2>🚨🚨 BUY ALERTS 🚨🚨</h2><table><tr><th>Company</th><th>Price</th><th>Signals</th><th>COI</th></tr>" + buy_rows + "</table></div>" if buy_rows else "<div class='section'><p>✅ No BUY alerts in this window.</p></div>"}
