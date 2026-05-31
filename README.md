@@ -76,7 +76,7 @@ Scans CNBC, Yahoo Finance (per-ticker feeds), and Reuters Business RSS for headl
 
 ### 🔍 Source D — Community Research via last30days skill
 
-Uses the [last30days]([https://github.com/saraliu-stack/trump-alert](https://github.com/mvanhorn/last30days-skill)) skill engine to search Reddit finance communities (r/stocks, r/wallstreetbets, r/investing, r/StockMarket) via their **public RSS feeds — no API key required**. These communities post "Trump just mentioned [company] on Fox" within minutes of any TV appearance, catching events that never appear anywhere official:
+Uses the [last30days](https://github.com/mvanhorn/last30days-skill) skill engine to search Reddit finance communities (r/stocks, r/wallstreetbets, r/investing, r/StockMarket) via their **public RSS feeds — no API key required**. These communities post "Trump just mentioned [company] on Fox" within minutes of any TV appearance, catching events that never appear anywhere official:
 
 | Event type | Example missed by A–C | How Source D catches it |
 |---|---|---|
