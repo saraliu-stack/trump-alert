@@ -209,92 +209,57 @@ def relevance_score(snippet: str, content: str = "") -> int:
 
 
 def pick_best_post(posts_for_company: list) -> dict | None:
-    """Return the post with the highest-relevance buy-signal snippet."""
-    buy_posts = [p for p in posts_for_company if p.get("signal") == "buy"]
-    pool = buy_posts if buy_posts else posts_for_company
-    if not pool:
+    """
+    Return the single most informative post per company.
+    Priority order: BUY signal → Trump's own words (📱 > 🎤) → news → relevance score.
+    Prefers direct Trump quotes over third-party interpretations of the same event.
+    """
+    if not posts_for_company:
         return None
-    return max(pool, key=lambda p: relevance_score(p.get("snippet", ""), ""))
+
+    def _key(p):
+        signal_score = 2 if p.get("signal") == "buy" else 0
+        src = p.get("source", "")
+        source_score = 2 if src == "📱" else (1 if src == "🎤" else 0)
+        rel = relevance_score(p.get("snippet", ""), "")
+        return (signal_score, source_score, rel)
+
+    return max(posts_for_company, key=_key)
 
 
 # ─────────────────────────────────────────────────────────────
-#  Per-company analysis synthesis
+#  Per-company analysis synthesis  (2 sentences max)
 # ─────────────────────────────────────────────────────────────
 def generate_analysis(ticker: str, company_data: dict, prices: dict) -> str:
-    """
-    Build a plain-English analysis paragraph for a company.
-    Covers: signal pattern, price action, COI context, news reaction.
-    """
-    c      = company_data
-    n      = len(c["posts"])
-    buys   = c["buy_count"]
-    coi    = COI_REGISTRY.get(ticker)
-    p_info = prices.get(ticker, {})
-    news   = [p for p in c["posts"] if p.get("source") == "📰"]
-    ts     = [p for p in c["posts"] if p.get("source") == "📱"]
-    speech = [p for p in c["posts"] if p.get("source") == "🎤"]
+    """Two-sentence summary: signal + most important follow-on fact (COI or price)."""
+    c     = company_data
+    buys  = c["buy_count"]
+    coi   = COI_REGISTRY.get(ticker)
+    p_info= prices.get(ticker, {})
+    chg_s = p_info.get("change_pct_since")
 
-    parts = []
-
-    # Signal summary
+    # Sentence 1 — signal
     if buys > 0:
-        sources_str = _sources_label(ts, speech, news)
-        parts.append(
-            f"Trump has sent <b>{buys} explicit buy signal{'s' if buys > 1 else ''}</b> "
-            f"for {c['company']} over the past 30 days, via {sources_str}."
-        )
-    elif n == 1:
-        parts.append(
-            f"{c['company']} received a single neutral mention — "
-            f"not a direct buy signal, but worth monitoring."
-        )
+        sig = f"<b>{buys} direct buy signal{'s' if buys > 1 else ''}</b>"
+        first = f"Trump sent {sig} for {c['company']}."
+    elif c["sell_count"] > 0:
+        first = f"Trump issued a <b>warning</b> about {c['company']}."
     else:
-        parts.append(
-            f"{c['company']} has been mentioned <b>{n} times</b> in the window "
-            f"without a direct buy signal — likely contextual coverage."
-        )
+        first = f"Mentioned {len(c['posts'])}× — no direct buy signal."
 
-    # Price action
-    price      = p_info.get("price")
-    chg_since  = p_info.get("change_pct_since")
-    chg_today  = p_info.get("change_pct_today")
-    if price:
-        price_str = f"${price:,.2f}"
-        if chg_since is not None:
-            direction = "up" if chg_since >= 0 else "down"
-            color_tag = "green" if chg_since >= 0 else "red"
-            parts.append(
-                f"Since first mention the stock is "
-                f"<span style='color:{color_tag};font-weight:bold'>"
-                f"{direction} {abs(chg_since):.1f}%</span> "
-                f"(currently {price_str}"
-                + (f", {_arrow(chg_today)}{abs(chg_today):.1f}% today" if chg_today is not None else "")
-                + ")."
-            )
+    # Sentence 2 — most important follow-on (COI beats price for BUY alerts)
+    if buys > 0 and coi:
+        h = COI_REGISTRY[ticker]
+        second = f"⚠️ Trump holds <b>{h['range']}</b> since {h['date']}."
+    elif chg_s is not None:
+        col = "#198754" if chg_s >= 0 else "#dc3545"
+        direction = "up" if chg_s >= 0 else "down"
+        second = (f"Stock <span style='color:{col};font-weight:bold'>"
+                  f"{direction} {abs(chg_s):.1f}%</span> since first mention.")
+    else:
+        second = ""
 
-    # COI
-    if coi:
-        parts.append(
-            f"⚠️ <b>Conflict of interest:</b> Trump personally holds "
-            f"{coi['range']} in {ticker} (purchased {coi['date']}). "
-            f"In every prior case where Trump praised a company, he had already bought the stock."
-        )
-
-    # News / market reaction
-    if news:
-        headline = news[-1].get("snippet", "")[:160].rstrip(".")
-        if headline:
-            parts.append(f"📰 <b>Media reaction:</b> \"{headline}…\"")
-
-    return " ".join(parts) if parts else "No analysis available."
-
-
-def _sources_label(ts, speech, news):
-    labels = []
-    if ts:     labels.append("Truth Social")
-    if speech: labels.append("White House speech")
-    if news:   labels.append("press coverage")
-    return " and ".join(labels) if labels else "an unspecified source"
+    return (first + (" " + second if second else "")).strip()
 
 
 def _arrow(val):
@@ -312,60 +277,27 @@ def _fmt_date_short(date_str: str) -> str:
         return date_str[:10]
 
 
-def build_mention_timeline(posts: list, max_items: int = 6) -> list:
+def _other_dates_html(all_posts: list, best_post) -> str:
     """
-    Return posts sorted newest-first, deduplicated, up to max_items.
-    Buy signals always surfaced first.
+    'Also mentioned: May 13, May 8 (+2 more)' — compact date-only line
+    for secondary mentions so the reader knows the full frequency
+    without reading redundant snippets from news re-tellings.
     """
-    valid = [p for p in posts if p.get("snippet") and len(p.get("snippet", "")) > 10]
-    # Sort: buy signals first, then by date descending
-    valid.sort(
-        key=lambda p: (0 if p.get("signal") == "buy" else 1, p.get("date", "")),
-        reverse=False
-    )
-    # Stable secondary sort by date desc within each priority group
-    buys = sorted([p for p in valid if p.get("signal") == "buy"],
-                  key=lambda p: p.get("date", ""), reverse=True)
-    others = sorted([p for p in valid if p.get("signal") != "buy"],
-                    key=lambda p: p.get("date", ""), reverse=True)
-    ordered = buys + others
-    # Deduplicate by (date, snippet-prefix)
-    seen, unique = set(), []
-    for p in ordered:
-        key = (p.get("date", ""), p.get("snippet", "")[:40])
-        if key not in seen:
-            seen.add(key)
-            unique.append(p)
-    return unique[:max_items]
-
-
-def build_timeline_html(posts: list, max_items: int = 6) -> str:
-    """Render a compact, date-stamped list of mentions for use in the HTML email."""
-    items = build_mention_timeline(posts, max_items)
-    if not items:
+    other = [p for p in all_posts if p is not best_post and p.get("date")]
+    other.sort(key=lambda p: p.get("date", ""), reverse=True)
+    dates, seen = [], set()
+    for p in other:
+        d = _fmt_date_short(p.get("date", ""))
+        if d and d not in seen:
+            seen.add(d)
+            dates.append(d)
+    if not dates:
         return ""
-    rows = ""
-    for p in items:
-        signal   = p.get("signal", "neutral")
-        date_s   = _fmt_date_short(p.get("date", ""))
-        source   = p.get("source", "📱")
-        snippet  = (p.get("snippet") or "")[:160].strip()
-        url      = p.get("url", "")
-        link     = (f' <a href="{url}" style="color:#0d6efd;font-size:10px;'
-                    f'text-decoration:none" title="source">↗</a>') if url else ""
-        border   = "#dc3545" if signal == "buy" else ("#ffc107" if signal == "warn" else "#dee2e6")
-        bg       = "#fff8f8" if signal == "buy" else "#fafafa"
-        badge    = (" <span style='background:#dc3545;color:#fff;font-size:9px;"
-                    "padding:1px 4px;border-radius:3px'>BUY</span>") if signal == "buy" else ""
-        rows += (
-            f'<div style="border-left:3px solid {border};background:{bg};'
-            f'padding:5px 10px;margin-bottom:4px;border-radius:0 4px 4px 0">'
-            f'<div style="font-size:11px;color:#6c757d;margin-bottom:2px">'
-            f'{source} <b style="color:#343a40">{date_s}</b>{badge}{link}</div>'
-            f'<div style="font-size:12px;color:#495057;font-style:italic;line-height:1.4">'
-            f'"{snippet}"</div></div>'
-        )
-    return rows
+    showing = dates[:4]
+    overflow = len(dates) - len(showing)
+    text = ", ".join(showing) + (f" (+{overflow} more)" if overflow else "")
+    return (f"<div style='font-size:11px;color:#adb5bd;margin-top:3px'>"
+            f"Also mentioned: {text}</div>")
 
 
 # ─────────────────────────────────────────────────────────────
@@ -612,11 +544,18 @@ def format_digest_text(digest):
             if c.get("conflict_of_interest") and c.get("holding_info"):
                 h = c["holding_info"]
                 lines.append(f"  COI: Trump holds {h['range']} (bought {h['date']})")
-            for p in build_mention_timeline(c["posts"], max_items=8):
-                marker = "  ⭐ BUY" if p.get("signal") == "buy" else "      "
-                lines.append(f"  {marker} {p['source']} {p['date']}: \"{p['snippet'][:130]}\"")
-                if p.get("url"):
-                    lines.append(f"          {p['url']}")
+            best = pick_best_post(c["posts"])
+            if best:
+                date_s = _fmt_date_short(best.get("date", ""))
+                lines.append(f"  {best['source']} {date_s}: \"{best['snippet'][:140]}\"")
+                others = [_fmt_date_short(p.get("date","")) for p in c["posts"]
+                          if p is not best and p.get("date")]
+                seen, uniq = set(), []
+                for d in others:
+                    if d and d not in seen:
+                        seen.add(d); uniq.append(d)
+                if uniq:
+                    lines.append(f"  Also mentioned: {', '.join(uniq[:4])}")
     else:
         lines.append(f"\n  No BUY alerts in the last {days} days.")
 
@@ -630,9 +569,18 @@ def format_digest_text(digest):
         coi = " [COI]" if c["conflict_of_interest"] else ""
         lines.append(f"\n  {sig}  {c['company']} ({ticker}){coi}  {fmt_price(prices, ticker)}")
         lines.append(f"       Mentions: {len(c['posts'])}  Buy: {c['buy_count']}  Sell/Warn: {c['sell_count']}")
-        for p in build_mention_timeline(c["posts"], max_items=6):
-            marker = "⭐" if p.get("signal") == "buy" else "  "
-            lines.append(f"       {marker} {p['source']} {p['date']}: \"{p['snippet'][:115]}\"")
+        best = pick_best_post(c["posts"])
+        if best:
+            date_s = _fmt_date_short(best.get("date", ""))
+            lines.append(f"       {best['source']} {date_s}: \"{best['snippet'][:120]}\"")
+            others = [_fmt_date_short(p.get("date","")) for p in c["posts"]
+                      if p is not best and p.get("date")]
+            seen, uniq = set(), []
+            for d in others:
+                if d and d not in seen:
+                    seen.add(d); uniq.append(d)
+            if uniq:
+                lines.append(f"       Also: {', '.join(uniq[:4])}")
 
     # Portfolio
     lines.append("\n" + "-" * 62)
@@ -704,69 +652,49 @@ def format_digest_html(digest):
                     col = "#198754" if chg_s >= 0 else "#dc3545"
                     price_html += f"<span style='color:{col}'>{'▲' if chg_s>=0 else '▼'}{abs(chg_s):.1f}% since mention</span>"
 
-            # Featured blockquote (best buy signal)
+            # Best Trump quote (one only — direct words preferred over news reports)
             quote_html = ""
-            if best and best.get("snippet") and best["relevance"] >= 40:
+            if best and best.get("snippet") and best["relevance"] >= 30:
+                date_s = _fmt_date_short(best.get("date", ""))
+                src_link = (f'&nbsp;·&nbsp;<a href="{best["url"]}" style="color:#0d6efd">source</a>'
+                            if best.get("url") else "")
+                other_dates = _other_dates_html(c["posts"], best)
                 quote_html = f"""
                 <blockquote style='border-left:4px solid #dc3545;margin:12px 0;
                     padding:10px 16px;background:#fff5f5;border-radius:0 6px 6px 0;
                     font-style:italic;color:#495057;font-size:14px'>
                   "{best['snippet']}"
                   <br><span style='font-size:11px;color:#6c757d;font-style:normal'>
-                    {best['source']} {best['date']}
-                    {f'&nbsp;·&nbsp;<a href="{best["url"]}" style="color:#0d6efd">source</a>' if best.get("url") else ""}
+                    {best['source']} {date_s}{src_link}
                   </span>
-                </blockquote>"""
-
-            # Full mention timeline (all dates cited)
-            timeline = build_timeline_html(c["posts"], max_items=8)
-            timeline_html = ""
-            if timeline:
-                n_extra = max(0, len(c["posts"]) - 8)
-                extra_note = (f"<div style='font-size:11px;color:#6c757d;margin-top:4px'>"
-                              f"…and {n_extra} more mention(s)</div>") if n_extra else ""
-                timeline_html = f"""
-                <div style='margin-top:12px'>
-                  <div style='font-size:11px;font-weight:bold;color:#6c757d;
-                      text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px'>
-                    All mentions — dated
-                  </div>
-                  {timeline}
-                  {extra_note}
-                </div>"""
+                </blockquote>
+                {other_dates}"""
 
             coi_html = ""
             if c.get("conflict_of_interest") and COI_REGISTRY.get(ticker):
                 h = COI_REGISTRY[ticker]
                 coi_html = f"""
                 <div style='background:#fff3cd;border:1px solid #ffc107;border-radius:6px;
-                    padding:10px 14px;margin:10px 0;font-size:13px;color:#664d03'>
-                  ⚠️ <b>Conflict of Interest:</b> Trump personally holds <b>{h['range']}</b>
-                  in {ticker} (purchased {h['date']}).
-                  Pattern: he bought before praising — every single time.
+                    padding:8px 14px;margin:8px 0;font-size:13px;color:#664d03'>
+                  ⚠️ <b>COI:</b> Trump holds <b>{h['range']}</b> in {ticker}
+                  (purchased {h['date']}).
                 </div>"""
 
             buy_cards_html += f"""
-            <div style='border:2px solid #dc3545;border-radius:10px;margin-bottom:20px;overflow:hidden'>
-              <div style='background:#dc3545;padding:14px 20px;display:flex;align-items:center;justify-content:space-between'>
-                <div>
-                  <span style='color:#fff;font-size:18px;font-weight:bold'>
-                    🚨 BUY ALERT — {c['company']} ({ticker})
-                  </span>
-                  <span style='color:#ffcdd2;font-size:13px;margin-left:12px'>
-                    {c['buy_count']} buy signal{'s' if c['buy_count']>1 else ''} · {len(c['posts'])} total mentions
-                  </span>
-                </div>
+            <div style='border:2px solid #dc3545;border-radius:10px;margin-bottom:16px;overflow:hidden'>
+              <div style='background:#dc3545;padding:12px 20px'>
+                <span style='color:#fff;font-size:17px;font-weight:bold'>
+                  🚨 BUY ALERT — {c['company']} ({ticker})
+                </span>
+                <span style='color:#ffcdd2;font-size:12px;margin-left:10px'>
+                  {c['buy_count']} buy signal{'s' if c['buy_count']>1 else ''} · {len(c['posts'])} mention(s)
+                </span>
               </div>
-              <div style='background:#fff;padding:16px 20px'>
-                <div style='margin-bottom:12px'>{price_html}</div>
+              <div style='background:#fff;padding:14px 20px'>
+                <div style='margin-bottom:10px'>{price_html}</div>
                 {quote_html}
                 {coi_html}
-                {timeline_html}
-                <div style='background:#f8f9fa;border-radius:6px;padding:12px 16px;
-                    font-size:13px;color:#212529;line-height:1.6;margin-top:10px'>
-                  <b>Analysis:</b> {analysis}
-                </div>
+                <div style='font-size:13px;color:#495057;margin-top:8px'>{analysis}</div>
               </div>
             </div>"""
     else:
@@ -800,35 +728,39 @@ def format_digest_html(digest):
                 col = "#198754" if chg_t>=0 else "#dc3545"
                 price_str += f" <span style='color:{col}'>{'▲' if chg_t>=0 else '▼'}{abs(chg_t):.1f}%</span>"
 
-        # Full dated mention timeline — every occurrence shown with source + date
-        timeline = build_timeline_html(c["posts"], max_items=5)
-        n_extra  = max(0, len(c["posts"]) - 5)
-        extra_note = (f"<div style='font-size:11px;color:#adb5bd;margin-top:2px'>"
-                      f"…+{n_extra} more mention(s)</div>") if n_extra else ""
+        # Single best quote (Trump's own words preferred) + compact date list for others
+        best = pick_best_post(c["posts"])
+        best_quote_html = ""
+        if best and best.get("snippet") and best["relevance"] >= 30:
+            date_s   = _fmt_date_short(best.get("date", ""))
+            src_link = (f' <a href="{best["url"]}" style="color:#0d6efd;font-size:10px">↗</a>'
+                        if best.get("url") else "")
+            snippet  = (best.get("snippet") or "")[:150]
+            best_quote_html = (
+                f"<div style='border-left:3px solid #dee2e6;padding:4px 10px;"
+                f"font-style:italic;font-size:13px;color:#495057;margin-bottom:4px'>"
+                f""{snippet}"</div>"
+                f"<div style='font-size:11px;color:#6c757d;margin-bottom:4px'>"
+                f"{best['source']} {date_s}{src_link}</div>"
+            )
+            best_quote_html += _other_dates_html(c["posts"], best)
 
         analysis_short = generate_analysis(ticker, c, prices)
 
         mention_rows += f"""
         <tr style='border-bottom:1px solid #dee2e6'>
-          <td style='padding:14px 16px;vertical-align:top;width:160px'>
-            <div style='font-weight:bold;font-size:15px;color:#212529'>{c['company']}</div>
+          <td style='padding:12px 16px;vertical-align:top;width:150px'>
+            <div style='font-weight:bold;font-size:14px;color:#212529'>{c['company']}</div>
             <div style='color:#6c757d;font-size:12px'>{ticker}{coi_badge}</div>
-            <div style='font-size:13px;margin-top:4px'>{price_str}</div>
-            <div style='margin-top:6px'>
+            <div style='font-size:13px;margin-top:3px'>{price_str}</div>
+            <div style='margin-top:5px'>
               <span style='background:#f1f3f5;color:{sig_color};padding:2px 8px;
                 border-radius:10px;font-size:11px;font-weight:bold'>{sig_label}</span>
             </div>
-            <div style='font-size:11px;color:#adb5bd;margin-top:4px'>
-              {len(c["posts"])} mention(s)
-            </div>
           </td>
-          <td style='padding:14px 16px;vertical-align:top;font-size:13px;color:#212529'>
-            {timeline}
-            {extra_note}
-            <div style='color:#495057;font-size:12px;margin-top:8px;line-height:1.5;
-                background:#f8f9fa;padding:8px 10px;border-radius:4px'>
-              {analysis_short}
-            </div>
+          <td style='padding:12px 16px;vertical-align:top;font-size:13px;color:#212529'>
+            {best_quote_html}
+            <div style='font-size:12px;color:#6c757d;margin-top:6px'>{analysis_short}</div>
           </td>
         </tr>"""
 
