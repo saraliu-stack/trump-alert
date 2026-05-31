@@ -30,7 +30,7 @@ A 113-page [OGE Form 278-T disclosure](https://www.cnbc.com/2026/05/15/trump-sto
 ## Features
 
 - **Two live sources**: Truth Social (CNN live archive, updated every 5 min) + White House remarks/speeches/briefings
-- **🚨 BUY ALERT** — flags when Trump explicitly promotes a company he holds stock in
+- **🚨 BUY ALERT** — flags when Trump explicitly promotes any company (conflict-of-interest notice added separately when he also holds that stock)
 - **Conflict of interest registry** — cross-references all 12 known Trump stock holdings (OGE-disclosed)
 - **Live prices** — shows % change since Trump's mention date (via yfinance)
 - **Daily digest** — automated email + Windows Task Scheduler support

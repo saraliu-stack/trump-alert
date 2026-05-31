@@ -72,36 +72,66 @@ pip install yfinance
 python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_posts.py" [OPTIONS]
 ```
 
-**Source B — White House speeches, remarks, press conferences:**
+**Source B — White House speeches, remarks, press conferences (two layers):**
+
+Layer B1: official transcripts scraped from whitehouse.gov
 ```bash
 python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_speeches.py" [OPTIONS]
 ```
 
-**Source C — Financial news headlines (CNBC, Yahoo Finance, Reuters RSS):**
+Layer B2: WH speech news supplement — political RSS feeds that report what Trump
+SAID at events, including video-only events with no published transcript:
+```bash
+python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_news.py" --wh-supplement [OPTIONS]
+```
+Layer B2 uses Reuters US Politics, AP Politics, Politico, The Hill, Bloomberg Politics,
+and Washington Post Politics RSS feeds. It applies speech-specific patterns
+("Trump said at the White House", "Trump told reporters at a rally", "during remarks",
+"at the signing ceremony") to find stories about company mentions at events that
+whitehouse.gov covered only as a video with no text. Results are tagged 🎤 (same as B1).
+
+**Source C — Financial news headlines (CNBC, Yahoo Finance, Reuters Business RSS):**
 ```bash
 python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_news.py" [OPTIONS]
 ```
-Source C catches Trump company mentions that originate from video events, rallies, and
-phone calls where no official WH transcript is published (e.g., the May 8 Dell surge,
-the Feb 19 Rome GA rally). It scans RSS headlines for "Trump praises/touts/says buy X".
+Source C catches Trump company mentions from market-focused outlets — stories about
+Trump praising/touting stocks without specifying a venue. Results tagged 📰.
 
 Pass through any `--hours`, `--days`, `--ticker`, `--buy-only` flags the user provided.
 
-All three scripts output the same JSON schema. Merge their `posts` arrays before processing.
+All sources output the same JSON schema. Merge their `posts` arrays before processing.
 Tag each result with its source type for display:
 - Truth Social posts → prefix alert with 📱 **Truth Social**
-- WH speeches/events → prefix alert with 🎤 **Speech/Event**
-- News headlines → prefix alert with 📰 **News Report**
+- WH speeches / B2 supplement → prefix alert with 🎤 **Speech/Event**
+- Financial news headlines → prefix alert with 📰 **News Report**
 
 Each matched item has:
 - `post_id` / `title`, `created_at` / `date`, `content`, `url`, `engagement`
 - `mentions`: list of `{company, ticker, signal_type, context_snippet}`
 - `conflict_of_interest`: true/false (Trump owns stock in this company)
 
-**Why speeches matter:** Trump's most powerful market-moving statements have come from
-live speeches and White House events, not just Truth Social. Dell surged 14% after
-"go out and buy a Dell" at a May 8 White House event. Apple, Thermo Fisher, and Micron
-all jumped after in-person remarks. The speech channel is the higher-volatility signal.
+**Why B2 matters:** whitehouse.gov only publishes text transcripts for formal remarks and
+press briefings. Video-only events (Mother's Day ceremonies, factory visits, rally footage)
+get a page with an embedded video but no text. The May 8 Dell +14% event was one of these —
+it never appeared in fetch_speeches.py. B2 catches it via news reports saying "Trump told
+attendees to go out and buy a Dell at the White House event."
+
+**Step 1b — WebSearch supplement for WH speeches (use when B2 returns few results):**
+
+If the date range covers a known speech or event and the RSS feeds are sparse (news often
+lags an event by several hours), do a targeted WebSearch to fill the gap:
+
+```
+Trump White House remarks speech site:reuters.com OR site:apnews.com OR site:cnbc.com OR site:bloomberg.com "{COMPANY}" {YEAR}
+```
+
+Example queries that would have caught documented misses:
+- `Trump "buy a Dell" White House May 2026 site:cnbc.com OR site:bloomberg.com`
+- `Trump remarks Apple "great company" 2026 site:reuters.com OR site:apnews.com`
+- `Trump speech Micron "hottest company" 2026 site:cnbc.com`
+
+Treat WebSearch results the same as B2 — tag as 🎤, include in the merged post list,
+fact-check normally in Step 2.
 
 ### Step 2: Fact-check each mention
 
@@ -128,7 +158,9 @@ Use the alert templates below. Output ALL alerts for the time window, sorted by 
 ### 🚨 BUY ALERT (highest prominence)
 
 Use when: Trump uses words like "buy", "great investment", "going up", "strong buy",
-"invest in", "you should own", or praises a company while tagging its ticker.
+"invest in", "you should own", "great company", or praises any company — regardless of
+whether Trump holds stock in it. COI is a separate notice layered on top, not a gate.
+If Trump both promotes AND holds the stock, show both the 🚨 BUY ALERT and the ⚠️ COI block.
 
 ```
 ╔══════════════════════════════════════════════════════════╗

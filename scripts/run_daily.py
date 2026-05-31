@@ -151,17 +151,26 @@ def build_digest(days, include_prices=True):
     print("[run_daily] Fetching Truth Social posts...", file=sys.stderr)
     ts_data = run_script("fetch_posts.py", scan_args) or {"meta": {}, "posts": []}
 
-    print("[run_daily] Fetching White House speeches...", file=sys.stderr)
+    print("[run_daily] Fetching White House speeches (transcripts)...", file=sys.stderr)
     wh_data = run_script("fetch_speeches.py", scan_args) or {"meta": {}, "posts": []}
+
+    print("[run_daily] Fetching WH speech news supplement (political RSS — catches video-only events)...", file=sys.stderr)
+    wh_supp_data = run_script("fetch_news.py", scan_args + ["--wh-supplement"]) or {"total_matched": 0, "posts": []}
+    # Tag supplement items as wh_supplement so they render with 🎤 (speech source)
+    for post in wh_supp_data.get("posts", []):
+        post.setdefault("source", "wh_supplement")
 
     print("[run_daily] Fetching financial news headlines (CNBC, Yahoo Finance, Reuters)...", file=sys.stderr)
     news_data = run_script("fetch_news.py", scan_args) or {"total_matched": 0, "posts": []}
-
-    # Tag news items so they render with the 📰 emoji in digests
     for post in news_data.get("posts", []):
         post.setdefault("source", "news")
 
-    all_posts = ts_data.get("posts", []) + wh_data.get("posts", []) + news_data.get("posts", [])
+    all_posts = (
+        ts_data.get("posts", [])
+        + wh_data.get("posts", [])
+        + wh_supp_data.get("posts", [])
+        + news_data.get("posts", [])
+    )
 
     # ---- Collect all company mentions ----
     company_mentions: dict = {}  # ticker -> {company, ticker, posts[], buy_count, sell_count, earliest_date}
@@ -170,7 +179,7 @@ def build_digest(days, include_prices=True):
         content = post.get("content", "")
         date_str = post.get("created_at") or post.get("date") or ""
         src = post.get("source", "")
-        if src == "whitehouse_speech":
+        if src in ("whitehouse_speech", "wh_supplement"):
             source_type = "🎤"
         elif src == "news":
             source_type = "📰"
@@ -240,6 +249,7 @@ def build_digest(days, include_prices=True):
         "days": days,
         "ts_meta": ts_data.get("meta", {}),
         "wh_meta": wh_data.get("meta", {}),
+        "wh_supp_count": wh_supp_data.get("total_matched", 0),
         "news_count": news_data.get("total_matched", 0),
         "company_mentions": company_mentions,
         "price_data": price_data,
@@ -256,6 +266,7 @@ def format_digest_text(digest):
     days = digest["days"]
     ts_meta = digest["ts_meta"]
     wh_meta = digest["wh_meta"]
+    wh_supp_count = digest.get("wh_supp_count", 0)
     news_count = digest.get("news_count", 0)
     companies = digest["company_mentions"]
     prices = digest["price_data"]
@@ -268,8 +279,9 @@ def format_digest_text(digest):
     lines.append(f"  Scan time: {now_str}")
     lines.append(f"  Window: Last {days} days")
     lines.append(f"  📱 Truth Social: {ts_meta.get('total_scanned', '?')} posts scanned")
-    lines.append(f"  🎤 WH Speeches: {wh_meta.get('total_scanned', '?')} items scanned")
-    lines.append(f"  📰 News headlines: {news_count} Trump+company stories matched")
+    lines.append(f"  🎤 WH Speeches: {wh_meta.get('total_scanned', '?')} transcripts"
+                 f"  +  {wh_supp_count} speech news reports")
+    lines.append(f"  📰 Financial news: {news_count} Trump+company stories matched")
     lines.append("=" * 60)
 
     # ---- BUY ALERTS ----
@@ -406,7 +418,7 @@ def format_digest_html(digest):
 <div class="header">
   <h1 style="color:#ff4444;margin:0">📊 TRUMP MARKET ALERT</h1>
   <p style="margin:4px 0;color:#aaa">Daily Digest · {digest['scan_time'][:16].replace('T',' ')} UTC · Last {digest['days']} days</p>
-  <p style="margin:2px 0;color:#888;font-size:11px">📱 {digest['ts_meta'].get('total_scanned','?')} Truth Social &nbsp;·&nbsp; 🎤 {digest['wh_meta'].get('total_scanned','?')} WH Speeches &nbsp;·&nbsp; 📰 {digest.get('news_count',0)} News stories</p>
+  <p style="margin:2px 0;color:#888;font-size:11px">📱 {digest['ts_meta'].get('total_scanned','?')} Truth Social &nbsp;·&nbsp; 🎤 {digest['wh_meta'].get('total_scanned','?')} WH transcripts + {digest.get('wh_supp_count',0)} speech news reports &nbsp;·&nbsp; 📰 {digest.get('news_count',0)} financial news</p>
 </div>
 
 {"<div class='buy-alert'><h2>🚨🚨 BUY ALERTS 🚨🚨</h2><table><tr><th>Company</th><th>Price</th><th>Signals</th><th>COI</th></tr>" + buy_rows + "</table></div>" if buy_rows else "<div class='section'><p>✅ No BUY alerts in this window.</p></div>"}
