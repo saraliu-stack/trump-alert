@@ -927,7 +927,13 @@ def send_email(subject, text_body, html_body, config):
     port = int(config.get("SMTP_PORT", 587))
     user = config.get("SMTP_USER", "")
     pw   = config.get("SMTP_PASS", "")
-    to   = config.get("ALERT_TO", user)
+
+    # ALERT_TO supports comma-separated addresses so one deployment can
+    # serve multiple subscribers: ALERT_TO=alice@gmail.com,bob@yahoo.com
+    to_raw    = config.get("ALERT_TO", user)
+    recipients = [addr.strip() for addr in to_raw.split(",") if addr.strip()]
+    if not recipients:
+        recipients = [user]
 
     if not user or not pw:
         print("[run_daily] Email not configured — set SMTP_USER and SMTP_PASS", file=sys.stderr)
@@ -936,7 +942,7 @@ def send_email(subject, text_body, html_body, config):
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = user
-    msg["To"]      = to
+    msg["To"]      = ", ".join(recipients)
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html",  "utf-8"))
 
@@ -944,8 +950,8 @@ def send_email(subject, text_body, html_body, config):
         with smtplib.SMTP(host, port) as server:
             server.starttls()
             server.login(user, pw)
-            server.sendmail(user, to, msg.as_string())
-        print(f"[run_daily] Email sent to {to}", file=sys.stderr)
+            server.sendmail(user, recipients, msg.as_string())
+        print(f"[run_daily] Email sent to {', '.join(recipients)}", file=sys.stderr)
         return True
     except Exception as e:
         print(f"[run_daily] Email send failed: {e}", file=sys.stderr)
