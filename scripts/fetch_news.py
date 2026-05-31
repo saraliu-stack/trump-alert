@@ -107,6 +107,12 @@ FINANCIAL_BUY_PATTERNS = [
     r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|touts?|championed|promoted)\b",
     # Trump recommends a specific stock/company as investment
     r"\btrump\b.{0,50}\b(recommend\w+|invest\w+)\b.{0,40}\b(stock|share|compan|firm)\b",
+    # Trade deal: a country agreed to buy company goods — "China agreed to buy 200 aircraft"
+    # Requires a country/deal keyword + "agreed to buy" + a quantity, so it won't match
+    # investor-directed buy language or IBD jargon.
+    r"\b(china|japan|europe|eu|india|saudi|uae|uk|canada|mexico|korea|trade\s+deal|trade\s+agreement)\b.{0,80}\b(agreed?\s+to\s+buy|will\s+buy|purchase[sd]?|order\w*)\b.{0,50}\b\d+\b",
+    # Broader trade deal: Trump announces deal involving purchases of company products
+    r"\btrump\b.{0,80}\b(trade\s+deal|trade\s+agreement|signed\s+a\s+deal)\b.{0,100}\b(buy|purchase|order|aircraft|planes?|products?|equipment|billion)\b",
 ]
 
 FINANCIAL_WARN_PATTERNS = [
@@ -129,6 +135,9 @@ WH_SPEECH_BUY_PATTERNS = [
     r"\b(white\s+house|rally|speech|remarks|press\s+conf)\b.{0,100}\b(prais\w+|endors\w+|go\s+buy|buy\s+a\b)\b",
     # Specific known phrasing patterns
     r"\btrump.{0,20}mother.{0,10}day.{0,60}(buy|compan|stock|dell|apple|intel)\b",
+    # Trade deal: country agreed to buy company goods — e.g. "China agreed to buy 200 aircraft"
+    r"\b(china|japan|europe|eu|india|saudi|uae|uk|canada|mexico|korea|trade\s+deal|trade\s+agreement)\b.{0,80}\b(agreed?\s+to\s+buy|will\s+buy|purchase[sd]?|order\w*)\b.{0,50}\b\d+\b",
+    r"\btrump\b.{0,80}\b(trade\s+deal|trade\s+agreement|signed\s+a\s+deal)\b.{0,100}\b(buy|purchase|order|aircraft|planes?|products?|equipment|billion)\b",
 ]
 
 WH_SPEECH_WARN_PATTERNS = [
