@@ -2,7 +2,7 @@
 
 > **⚠️ DISCLAIMER:** This tool is for informational purposes only. Nothing here is financial advice. Do not make investment decisions based solely on its output. See the full [Legal Disclaimer](#️-legal-disclaimer) at the bottom of this page.
 
-A Claude Code skill that monitors Trump's Truth Social posts and White House speeches for company/stock ticker mentions, fact-checks claims against reliable financial sources, and delivers formatted alerts.
+A Claude Code skill that monitors **four sources** — Trump's Truth Social posts, White House speeches, financial news feeds, and community research via the [last30days skill](https://github.com/saraliu-stack/trump-alert) — for company/stock ticker mentions, fact-checks claims against reliable financial sources, and delivers formatted alerts.
 
 ---
 
@@ -29,7 +29,7 @@ A 113-page [OGE Form 278-T disclosure](https://www.cnbc.com/2026/05/15/trump-sto
 
 ## Features
 
-- **Two live sources**: Truth Social (CNN live archive, updated every 5 min) + White House remarks/speeches/briefings
+- **Four monitoring sources** covering every channel Trump uses to move markets (see [Data Sources](#data-sources) below)
 - **🚨 BUY ALERT** — flags when Trump explicitly promotes any company (conflict-of-interest notice added separately when he also holds that stock)
 - **Conflict of interest registry** — cross-references all 12 known Trump stock holdings (OGE-disclosed)
 - **Live prices** — shows % change since Trump's mention date (via yfinance)
@@ -40,7 +40,16 @@ A 113-page [OGE Form 278-T disclosure](https://www.cnbc.com/2026/05/15/trump-sto
 
 ## Data Sources
 
-### Truth Social (Primary — live, updated every 5 min)
+The tool runs four sources in parallel. Each one catches a different category of event:
+
+| Source | Tag | Script | What it catches |
+|--------|-----|--------|-----------------|
+| Truth Social | 📱 | `fetch_posts.py` | Posts Trump writes himself |
+| WH Speeches | 🎤 | `fetch_speeches.py` + `fetch_news.py --wh-supplement` | Formal transcripts + video-only events covered by press |
+| Financial News | 📰 | `fetch_news.py` | Stock-focused outlets reporting Trump company praise |
+| Community Research | 🔍 | `fetch_last30days.py` | Fox calls, hallway scrums, CEO meetings, rally ad-libs |
+
+### 📱 Source A — Truth Social (live, updated every 5 min)
 
 Maintained by CNN Visuals:
 - JSON: `https://ix.cnn.io/data/truth-social/truth_archive.json`
@@ -50,13 +59,34 @@ Community backup maintained by Matt Stiles:
 - `https://stilesdata.com/trump-truth-social-archive/posts.json`
 - [GitHub: stiles/trump-truth-social-archive](https://github.com/stiles/trump-truth-social-archive)
 
-### White House Speeches & Briefings
+### 🎤 Source B — White House Speeches & Briefings (two layers)
 
-Scraped from:
+**Layer B1 — Official transcripts** scraped from whitehouse.gov:
 - `https://www.whitehouse.gov/remarks/` (formal remarks)
-- `https://www.whitehouse.gov/briefings-statements/` (press briefings and official statements)
+- `https://www.whitehouse.gov/briefings-statements/` (press briefings)
 
-The skill fetches up to 7 pages of each listing (roughly 70+ speeches) to cover a 30-day lookback window. Note: video-only events (e.g., some Mother's Day remarks) have no published transcript — these are the hardest to catch.
+Fetches up to 7 pages of each listing (~70+ speeches) to cover a 30-day window.
+
+**Layer B2 — Speech news supplement** for video-only events with no published transcript:
+Scans political RSS feeds (Reuters Politics, AP Politics, Politico, The Hill, Bloomberg Politics, Washington Post Politics) for stories about what Trump *said* at events — catches cases like the May 8 Dell +14% Mother's Day event, which was posted as video-only on whitehouse.gov.
+
+### 📰 Source C — Financial News RSS
+
+Scans CNBC, Yahoo Finance (per-ticker feeds), and Reuters Business RSS for headlines reporting Trump praising or criticising companies. Catches market-moving statements covered by financial press regardless of venue.
+
+### 🔍 Source D — Community Research via last30days skill
+
+Uses the [last30days](https://github.com/saraliu-stack/trump-alert) skill engine to search Reddit finance communities (r/stocks, r/wallstreetbets, r/investing, r/StockMarket) via their **public RSS feeds — no API key required**. These communities post "Trump just mentioned [company] on Fox" within minutes of any TV appearance, catching events that never appear anywhere official:
+
+| Event type | Example missed by A–C | How Source D catches it |
+|---|---|---|
+| Fox News phone call | Micron "one of the hottest companies" (Mar 26) | r/stocks posts within minutes of the Fox segment |
+| Reporter hallway scrum | Unscripted company praise to press pool | Reddit community coverage + news follow-up |
+| Cabinet / CEO meeting | Praise after private White House meeting | Finance subreddits + Reuters Politics RSS |
+| Rally ad-lib not in official transcript | Off-script endorsement | r/wallstreetbets, r/StockMarket threads |
+| CNBC / Bloomberg TV interview | Unscripted stock mention | Community posts + financial news supplement |
+
+When running interactively (Claude Code), the last30days skill also uses full web search for even broader coverage — including niche financial outlets and political blogs not in standard RSS feeds.
 
 ### Conflict of Interest Registry
 
@@ -87,13 +117,15 @@ pip install yfinance
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/fetch_posts.py` | Fetch & scan Truth Social posts via CNN archive |
-| `scripts/fetch_speeches.py` | Fetch & scan WH remarks and briefings (paginated) |
-| `scripts/fetch_prices.py` | Live stock prices via yfinance |
-| `scripts/run_daily.py` | Full digest orchestrator (BUY alerts + MICRO + PORTFOLIO) |
-| `scripts/setup_config.py` | Interactive email + Windows Task Scheduler setup wizard |
+| Script | Source | Purpose |
+|--------|--------|---------|
+| `scripts/fetch_posts.py` | 📱 A | Truth Social posts via CNN live archive |
+| `scripts/fetch_speeches.py` | 🎤 B1 | WH remarks and briefings (paginated, up to 7 pages) |
+| `scripts/fetch_news.py` | 🎤 B2 + 📰 C | WH speech news supplement (`--wh-supplement`) and financial news RSS |
+| `scripts/fetch_last30days.py` | 🔍 D | last30days skill — Reddit RSS research for off-camera events |
+| `scripts/fetch_prices.py` | — | Live stock prices via yfinance |
+| `scripts/run_daily.py` | — | Orchestrates all four sources, builds digest, sends email |
+| `scripts/setup_config.py` | — | Interactive Gmail + Windows Task Scheduler setup wizard |
 
 ---
 
@@ -153,7 +185,7 @@ This software is provided **"AS IS"**, without warranty of any kind, express or 
 - Do not guarantee that alerts are complete, accurate, or delivered in time to be actionable
 - Do not guarantee that all Trump statements, posts, or speeches are captured — some events (video-only, private calls, off-the-record remarks) may not appear in the sources this tool monitors
 - Do not guarantee that conflict-of-interest data reflects Trump's current holdings — OGE filings are periodic and may lag actual trades by weeks or months
-- Accept no responsibility for errors, omissions, or inaccuracies in third-party data sources (CNN archive, whitehouse.gov, RSS feeds)
+- Accept no responsibility for errors, omissions, or inaccuracies in third-party data sources (CNN archive, whitehouse.gov, RSS feeds, Reddit, or any community platform)
 
 ### Limitation of Liability
 
@@ -177,7 +209,7 @@ This tool is a **monitoring and research aid**, not an automated trading system.
 
 ### Third-Party Sources
 
-This tool aggregates content from third-party sources including CNN, Yahoo Finance, CNBC, Reuters, the White House website, and the U.S. Office of Government Ethics. The authors are not affiliated with any of these organizations. Their content is their own; accuracy and completeness are their responsibility. Always verify any claim via primary sources:
+This tool aggregates content from third-party sources including CNN, Yahoo Finance, CNBC, Reuters, AP News, Politico, The Hill, Bloomberg, Washington Post, Reddit, the White House website, and the U.S. Office of Government Ethics. The authors are not affiliated with any of these organizations. Their content is their own; accuracy and completeness are their responsibility. Always verify any claim via primary sources:
 
 - SEC filings: [sec.gov/cgi-bin/browse-edgar](https://www.sec.gov/cgi-bin/browse-edgar)
 - OGE disclosures: [efts.usoge.gov](https://efts.usoge.gov/EFTS/public/search)
