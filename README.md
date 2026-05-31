@@ -56,7 +56,7 @@ Click **[Use this template](https://github.com/saraliu-stack/trump-alert/generat
 1. Enable [2-Step Verification](https://myaccount.google.com/security) on your Google account
 2. Go to [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
 3. Select **Mail** → **Other** → name it `trump-alert` → click **Generate**
-4. Copy the 16-character password (e.g. `bpyf hunp mgyf ulzz`)
+4. Copy the 16-character password (e.g. `abcd efgh ijkl mnop`)
 
 ### Step 3 — Add your secrets
 
