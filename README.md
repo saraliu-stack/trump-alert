@@ -2,7 +2,7 @@
 
 > **⚠️ DISCLAIMER:** This tool is for informational purposes only. Nothing here is financial advice. Do not make investment decisions based solely on its output. See the full [Legal Disclaimer](#️-legal-disclaimer) at the bottom of this page.
 
-A Claude Code skill that monitors **four sources** — Trump's Truth Social posts, White House speeches, financial news feeds, and community research via the [last30days skill](https://github.com/saraliu-stack/trump-alert) — for company/stock ticker mentions, fact-checks claims against reliable financial sources, and delivers formatted alerts.
+A Claude Code skill that monitors **four sources** — Trump's Truth Social posts, White House speeches, financial news feeds, and community research — for company/stock ticker mentions, flags conflicts of interest against Trump's OGE-disclosed holdings, and delivers a formatted daily email digest.
 
 ---
 
@@ -31,10 +31,12 @@ A 113-page [OGE Form 278-T disclosure](https://www.cnbc.com/2026/05/15/trump-sto
 
 - **Four monitoring sources** covering every channel Trump uses to move markets (see [Data Sources](#data-sources) below)
 - **🚨 BUY ALERT** — flags when Trump explicitly promotes any company (conflict-of-interest notice added separately when he also holds that stock)
+- **Dated mention timeline** — every company in the digest lists all occurrences with source icon, exact date, and snippet — not just the "best" quote
+- **30-day rolling window** — each digest covers the full past month, not just today
 - **Conflict of interest registry** — cross-references all 12 known Trump stock holdings (OGE-disclosed)
 - **Live prices** — shows % change since Trump's mention date (via yfinance)
-- **Daily digest** — automated email + Windows Task Scheduler support
-- **Fact-checking** — Reuters, AP, Bloomberg, WSJ, CNBC only
+- **Cloud scheduling via GitHub Actions** — runs at 7 AM EDT every day with no PC required; falls back to Windows Task Scheduler for local-only setups
+- **Sliding-window cache** — cold start fetches 30 days once; subsequent runs only pull the last 25 hours and merge, keeping warm runs fast (~10–15 s)
 
 ---
 
@@ -65,28 +67,30 @@ Community backup maintained by Matt Stiles:
 - `https://www.whitehouse.gov/remarks/` (formal remarks)
 - `https://www.whitehouse.gov/briefings-statements/` (press briefings)
 
-Fetches up to 7 pages of each listing (~70+ speeches) to cover a 30-day window.
+Fetches up to 3 pages of each listing (~49 speeches per run) within an 80-second wall-time budget to avoid CI timeouts. A deadline check before each request ensures the script always returns results rather than being killed mid-run.
 
 **Layer B2 — Speech news supplement** for video-only events with no published transcript:
-Scans political RSS feeds (Reuters Politics, AP Politics, Politico, The Hill, Bloomberg Politics, Washington Post Politics) for stories about what Trump *said* at events — catches cases like the May 8 Dell +14% Mother's Day event, which was posted as video-only on whitehouse.gov.
+Scans political RSS feeds (Reuters Politics, Politico, The Hill, CNBC Politics) plus **Google News RSS searches** for stories about what Trump *said* at events — catches cases like the May 8 Dell +14% Mother's Day event, which was posted as video-only on whitehouse.gov.
 
 ### 📰 Source C — Financial News RSS
 
-Scans CNBC, Yahoo Finance (per-ticker feeds), and Reuters Business RSS for headlines reporting Trump praising or criticising companies. Catches market-moving statements covered by financial press regardless of venue.
+Scans Yahoo Finance per-ticker feeds, CNBC, and Reuters Business, plus **four Google News RSS search feeds** specifically targeting "Trump praised company stock" stories. The Google News feeds are the most reliable source from cloud runners — they work from any network, return the same results as a Google News search, and require no authentication.
 
-### 🔍 Source D — Community Research via last30days skill
+The filter accepts any article mentioning Trump alongside company names (Dell, Micron, Palantir, etc.) even if the word "stock" does not appear, to avoid missing praise-heavy stories that use plain language.
 
-Uses the [last30days](https://github.com/mvanhorn/last30days-skill) skill engine to search Reddit finance communities (r/stocks, r/wallstreetbets, r/investing, r/StockMarket) via their **public RSS feeds — no API key required**. These communities post "Trump just mentioned [company] on Fox" within minutes of any TV appearance, catching events that never appear anywhere official:
+### 🔍 Source D — Community Research (Reddit RSS + Google News)
+
+Searches Reddit finance communities (r/stocks, r/wallstreetbets, r/investing, r/StockMarket) via their **public RSS search endpoints** and Google News for stories about Trump TV appearances and off-camera company mentions. No API key required.
+
+If the optional [last30days](https://github.com/mvanhorn/last30days-skill) skill engine is installed locally, it is used instead for broader AI-assisted community research. On GitHub Actions (where the engine is not installed), the direct Reddit RSS fallback runs automatically with no configuration change.
 
 | Event type | Example missed by A–C | How Source D catches it |
 |---|---|---|
 | Fox News phone call | Micron "one of the hottest companies" (Mar 26) | r/stocks posts within minutes of the Fox segment |
 | Reporter hallway scrum | Unscripted company praise to press pool | Reddit community coverage + news follow-up |
-| Cabinet / CEO meeting | Praise after private White House meeting | Finance subreddits + Reuters Politics RSS |
+| Cabinet / CEO meeting | Praise after private White House meeting | Finance subreddits + Google News |
 | Rally ad-lib not in official transcript | Off-script endorsement | r/wallstreetbets, r/StockMarket threads |
-| CNBC / Bloomberg TV interview | Unscripted stock mention | Community posts + financial news supplement |
-
-When running interactively (Claude Code), the last30days skill also uses full web search for even broader coverage — including niche financial outlets and political blogs not in standard RSS feeds.
+| CNBC / Bloomberg TV interview | Unscripted stock mention | Google News interview-coverage feed |
 
 ### Conflict of Interest Registry
 
@@ -114,33 +118,61 @@ The simplest option. No installation needed beyond cloning the repo into your sk
 /trump-alert --ticker=DELL
 ```
 
-### 2. MCP Server (Claude Desktop, Cursor, any MCP agent)
+### 2. Automated daily email via GitHub Actions (recommended)
 
-Makes trump-alert available as a tool in any MCP-compatible host. Once configured, just ask your agent "did Trump mention any stocks today?" and it calls the tool automatically.
+Runs on GitHub's servers every morning at 7 AM EDT — no PC required, no cron job to maintain. Each run does a full 30-day scan and emails the digest.
 
-**Install:**
+**One-time setup (≈5 minutes):**
+
+1. Fork this repo on GitHub.
+2. Go to **Settings → Secrets and variables → Actions** and add three repository secrets:
+
+   | Secret | Value |
+   |--------|-------|
+   | `SMTP_USER` | Your Gmail address |
+   | `SMTP_PASS` | A [Gmail App Password](https://myaccount.google.com/apppasswords) (requires 2FA enabled) |
+   | `ALERT_TO` | The address to receive the digest (can be the same as `SMTP_USER`) |
+
+3. Go to the **Actions tab → Trump Market Alert — Daily Digest → Run workflow** to trigger a test run.
+
+The workflow file is at `.github/workflows/daily-alert.yml`. To adjust the schedule, edit the `cron` line (default: `0 11 * * *` = 7 AM EDT).
+
+### 3. Local daily digest (Windows Task Scheduler)
+
+For local-only use with the PC left on.
+
 ```bash
-pip install mcp          # MCP runtime
-pip install yfinance     # optional: live prices
+# Install dependency
+pip install yfinance
+
+# Interactive setup: configures Gmail + registers a Task Scheduler job at 7 AM
+python scripts/setup_config.py
+
+# Run manually at any time (saves to ~/Documents/TrumpAlerts/)
+python scripts/run_daily.py --days=30 --email
+
+# Force a full 30-day refetch, ignoring the local cache
+python scripts/run_daily.py --days=30 --cold --email
 ```
 
-**Configure your agent host:**
+Config is stored in `~/.config/trump-alert/.env` and is never committed to git.
+
+### MCP Server (Claude Desktop, Cursor, any MCP agent)
+
+Makes trump-alert available as a tool in any MCP-compatible host.
 
 ```jsonc
 // Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json
 // Cursor:         ~/.cursor/mcp.json
-// Claude Code:    ~/.claude/claude_code_config.json
 {
   "mcpServers": {
     "trump-alert": {
       "command": "python",
-      "args": ["C:/Users/saral/.claude/skills/trump-alert/mcp_server.py"]
+      "args": ["C:/path/to/trump-alert/mcp_server.py"]
     }
   }
 }
 ```
-
-**Tools exposed to your agent:**
 
 | Tool | What it does |
 |------|-------------|
@@ -149,64 +181,18 @@ pip install yfinance     # optional: live prices
 | `get_trump_portfolio` | Live prices on Trump's OGE-disclosed holdings |
 | `check_conflict` | Check if a specific ticker is in Trump's holdings |
 
-### 3. Python Package (import into any script, notebook, or agent)
-
-```bash
-# Install from local checkout
-pip install -e "C:/Users/saral/.claude/skills/trump-alert[all]"
-```
-
-```python
-from trump_alert import scan, digest, portfolio, TRUMP_HOLDINGS
-
-# Scan last 48h across all sources
-result = scan(hours=48)
-print(f"BUY alerts: {len(result['buy_alerts'])}")
-for alert in result['buy_alerts']:
-    print(f"  {alert['ticker']} — {alert['context_snippet'][:80]}")
-
-# Check if a ticker has a COI
-from trump_alert import CONFLICT_TICKERS
-if "DELL" in CONFLICT_TICKERS:
-    print("Trump holds DELL — any praise is a conflict of interest")
-
-# Full 30-day digest
-d = digest(days=30)
-for ticker, company in d['company_mentions'].items():
-    if company['buy_count'] > 0:
-        print(f"🚨 {ticker}: {company['buy_count']} BUY signals")
-
-# Live portfolio prices
-p = portfolio()
-for ticker, info in p['holdings'].items():
-    print(f"{ticker}: ${info['price']} ({info['change_pct_today']:+.1f}% today)")
-```
-
-### Daily automated digest
-
-```bash
-# Run a 30-day digest (saves to ~/Documents/TrumpAlerts/)
-python scripts/run_daily.py --days=30
-
-# Set up Gmail delivery + Windows Task Scheduler
-python scripts/setup_config.py
-
-# Install price dependency (one-time)
-pip install yfinance
-```
-
 ---
 
 ## Scripts
 
 | Script | Source | Purpose |
 |--------|--------|---------|
-| `scripts/fetch_posts.py` | 📱 A | Truth Social posts via CNN live archive |
-| `scripts/fetch_speeches.py` | 🎤 B1 | WH remarks and briefings (paginated, up to 7 pages) |
-| `scripts/fetch_news.py` | 🎤 B2 + 📰 C | WH speech news supplement (`--wh-supplement`) and financial news RSS |
-| `scripts/fetch_last30days.py` | 🔍 D | last30days skill — Reddit RSS research for off-camera events |
+| `scripts/fetch_posts.py` | 📱 A | Truth Social posts via CNN live archive; strips DJT post-signature from ticker detection |
+| `scripts/fetch_speeches.py` | 🎤 B1 | WH remarks and briefings (up to 3 pages each, 80 s wall-time budget) |
+| `scripts/fetch_news.py` | 🎤 B2 + 📰 C | WH speech supplement (`--wh-supplement`) and financial news; uses Yahoo Finance, CNBC, Reuters, and Google News RSS |
+| `scripts/fetch_last30days.py` | 🔍 D | Reddit RSS + Google News fallback for off-camera events; uses last30days engine if installed |
 | `scripts/fetch_prices.py` | — | Live stock prices via yfinance |
-| `scripts/run_daily.py` | — | Orchestrates all four sources, builds digest, sends email |
+| `scripts/run_daily.py` | — | Orchestrates all four sources, merges sliding-window cache, builds digest with dated timelines, sends email |
 | `scripts/setup_config.py` | — | Interactive Gmail + Windows Task Scheduler setup wizard |
 
 ---
@@ -236,7 +222,11 @@ As of May 2026 OGE filings:
 
 ## Config
 
-Run `python scripts/setup_config.py` to set up Gmail delivery and/or a Windows Task Scheduler job. Config is stored in `~/.config/trump-alert/.env`.
+**GitHub Actions (recommended):** add `SMTP_USER`, `SMTP_PASS`, and `ALERT_TO` as repository secrets — see [setup steps above](#2-automated-daily-email-via-github-actions-recommended). No local config file needed.
+
+**Local / Windows Task Scheduler:** run `python scripts/setup_config.py` to set up Gmail delivery and register a Task Scheduler job. Credentials are stored in `~/.config/trump-alert/.env` (gitignored, never committed).
+
+Environment variables always override the config file, so the same script works both locally and in CI without any code change.
 
 ---
 
