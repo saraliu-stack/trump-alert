@@ -34,4 +34,4 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           ALERT_TO:  ${{ secrets.ALERT_TO }}
-        run: python scripts/run_daily.py --days=2 --email
+        run: python scripts/run_daily.py --days=30 --email

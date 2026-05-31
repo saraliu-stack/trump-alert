@@ -41,7 +41,7 @@ from html.parser import HTMLParser
 
 # Mode 1: financial news — Trump company mentions from market-focused outlets
 FINANCIAL_RSS_FEEDS = [
-    # Yahoo Finance per-ticker feeds (most reliable for Trump stock stories)
+    # Yahoo Finance per-ticker feeds
     "https://feeds.finance.yahoo.com/rss/2.0/headline?s=PLTR&region=US&lang=en-US",
     "https://feeds.finance.yahoo.com/rss/2.0/headline?s=DELL&region=US&lang=en-US",
     "https://feeds.finance.yahoo.com/rss/2.0/headline?s=INTC&region=US&lang=en-US",
@@ -54,8 +54,12 @@ FINANCIAL_RSS_FEEDS = [
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
     # Reuters business
     "https://feeds.reuters.com/reuters/businessNews",
-    # AP business
-    "https://rsshub.app/apnews/topics/business",
+    # Google News search feeds — reliable from any network / CI runner
+    # Catches "Trump praises X" stories that don't appear in per-ticker feeds
+    "https://news.google.com/rss/search?q=Trump+stock+company+praised+OR+endorsed+OR+buy&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Trump+Palantir+OR+Dell+OR+Micron+OR+Intel+OR+Apple+OR+Nvidia+stock&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Trump+says+buy+OR+praised+OR+invest+OR+%22great+company%22&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Trump+Goldman+Sachs+OR+Microsoft+OR+Tesla+OR+Amazon+stock&hl=en-US&gl=US&ceid=US:en",
 ]
 
 # Mode 2: political/general news — what Trump said at WH events and speeches
@@ -63,19 +67,16 @@ WH_SUPPLEMENT_RSS_FEEDS = [
     # Reuters US politics and general US news
     "https://feeds.reuters.com/Reuters/PoliticsNews",
     "https://feeds.reuters.com/reuters/domesticNews",
-    # AP Top News (catches WH event coverage)
-    "https://rsshub.app/apnews/topics/politics",
-    "https://rsshub.app/apnews/topics/us-news",
     # The Hill — strong WH/Congress coverage
     "https://thehill.com/feed/",
     # Politico
     "https://www.politico.com/rss/politicopicks.xml",
-    # Bloomberg politics
-    "https://feeds.bloomberg.com/politics/news.rss",
     # CNBC politics
     "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000113",
-    # Washington Post politics
-    "https://feeds.washingtonpost.com/rss/politics",
+    # Google News — WH speech / event coverage (reliable from GitHub Actions)
+    "https://news.google.com/rss/search?q=Trump+White+House+speech+OR+remarks+company+stock&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Trump+said+praised+OR+endorsed+OR+recommended+company&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=Trump+rally+OR+press+conference+stock+OR+company+buy&hl=en-US&gl=US&ceid=US:en",
 ]
 
 # ---------------------------------------------------------------------------
@@ -322,11 +323,15 @@ def is_trump_related(text: str, speech_mode: bool = False) -> bool:
         ]
         if not any(w in low for w in event_words):
             return False
-    # Must reference a market / company context
+    # Must reference a market / company context (company names count directly)
     market_words = [
         "stock", "share", "invest", "compan", "corp", "market", "buy", "sell",
         "praise", "boost", "touts", "endorses", "says", "tells", "urges",
-        "recommends", "praised", "told", "urged", "great",
+        "recommends", "praised", "told", "urged", "great", "hails", "promotes",
+        "champion", "fantastic", "tremendous", "incredible", "phenomenal",
+        # Major company name fragments so "Trump + Dell" passes without needing "stock"
+        "dell", "apple", "palantir", "nvidia", "micron", "intel", "microsoft",
+        "goldman", "tesla", "amazon", "google", "meta", "boeing", "lockheed",
     ]
     return any(w in low for w in market_words)
 

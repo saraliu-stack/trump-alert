@@ -275,16 +275,58 @@ def _parse_l30d_json(raw_json: str, cutoff_dt: datetime, ticker_filter: str | No
     return results
 
 
+def _fetch_reddit_rss_fallback(hours: int, ticker_filter=None, buy_only=False) -> list[dict]:
+    """
+    Fallback when last30days engine is not installed.
+    Queries Reddit's public RSS search feeds directly — no API key needed.
+    Catches posts from r/stocks, r/wallstreetbets, r/investing, r/StockMarket
+    where community members report Trump company mentions they saw on TV/Fox.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from fetch_news import fetch_from_feeds, FINANCIAL_BUY_PATTERNS, FINANCIAL_WARN_PATTERNS
+    except ImportError as e:
+        print(f"[fetch_last30days] cannot import fetch_news: {e}", file=sys.stderr)
+        return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    # Reddit public RSS search — sorted by new, covers up to ~1 month
+    # These subreddits post "Trump just said buy X on Fox" within minutes of any appearance.
+    reddit_feeds = [
+        "https://www.reddit.com/r/stocks/search.rss?q=trump+company+stock&sort=new&t=month&limit=25",
+        "https://www.reddit.com/r/wallstreetbets/search.rss?q=trump+praised+company&sort=new&t=month&limit=25",
+        "https://www.reddit.com/r/investing/search.rss?q=trump+stock+mention+buy&sort=new&t=month&limit=25",
+        "https://www.reddit.com/r/StockMarket/search.rss?q=trump+stock+buy&sort=new&t=month&limit=25",
+        "https://www.reddit.com/r/stocks/search.rss?q=trump+Dell+OR+Micron+OR+Palantir+OR+Intel+OR+Nvidia&sort=new&t=month&limit=25",
+        # Google News searches for community/social coverage of Trump market moves
+        "https://news.google.com/rss/search?q=Trump+Fox+News+company+stock+buy+OR+praised&hl=en-US&gl=US&ceid=US:en",
+        "https://news.google.com/rss/search?q=Trump+interview+company+stock+buy+OR+great&hl=en-US&gl=US&ceid=US:en",
+    ]
+
+    print("[fetch_last30days] Using Reddit RSS + Google News fallback (last30days not installed)...", file=sys.stderr)
+    posts = fetch_from_feeds(
+        feeds=reddit_feeds,
+        cutoff_dt=cutoff,
+        buy_patterns=FINANCIAL_BUY_PATTERNS,
+        warn_patterns=FINANCIAL_WARN_PATTERNS,
+        source_tag="last30days",
+        speech_mode=False,
+        ticker_filter=ticker_filter,
+        buy_only=buy_only,
+    )
+    return posts
+
+
 def fetch_via_last30days(hours: int, ticker_filter=None, buy_only=False) -> list[dict]:
     """Run last30days engine with Reddit RSS and return trump-alert items."""
     engine = _find_last30days()
     if not engine:
         print(
-            "[fetch_last30days] last30days engine not found — skipping Source D. "
-            "Install it at ~/.claude/skills/last30days/ to enable.",
+            "[fetch_last30days] last30days engine not found — using Reddit RSS fallback.",
             file=sys.stderr,
         )
-        return []
+        return _fetch_reddit_rss_fallback(hours, ticker_filter, buy_only)
 
     days = max(1, hours // 24)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)

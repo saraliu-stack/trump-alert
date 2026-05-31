@@ -301,6 +301,73 @@ def _arrow(val):
     return "▲" if val is not None and val >= 0 else "▼"
 
 
+def _fmt_date_short(date_str: str) -> str:
+    """'2026-05-13' → 'May 13'"""
+    if not date_str or len(date_str) < 10:
+        return date_str or "?"
+    try:
+        dt = datetime.fromisoformat(date_str[:10])
+        return dt.strftime("%b %-d") if sys.platform != "win32" else dt.strftime("%b %d").lstrip("0").strip()
+    except (ValueError, AttributeError):
+        return date_str[:10]
+
+
+def build_mention_timeline(posts: list, max_items: int = 6) -> list:
+    """
+    Return posts sorted newest-first, deduplicated, up to max_items.
+    Buy signals always surfaced first.
+    """
+    valid = [p for p in posts if p.get("snippet") and len(p.get("snippet", "")) > 10]
+    # Sort: buy signals first, then by date descending
+    valid.sort(
+        key=lambda p: (0 if p.get("signal") == "buy" else 1, p.get("date", "")),
+        reverse=False
+    )
+    # Stable secondary sort by date desc within each priority group
+    buys = sorted([p for p in valid if p.get("signal") == "buy"],
+                  key=lambda p: p.get("date", ""), reverse=True)
+    others = sorted([p for p in valid if p.get("signal") != "buy"],
+                    key=lambda p: p.get("date", ""), reverse=True)
+    ordered = buys + others
+    # Deduplicate by (date, snippet-prefix)
+    seen, unique = set(), []
+    for p in ordered:
+        key = (p.get("date", ""), p.get("snippet", "")[:40])
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+    return unique[:max_items]
+
+
+def build_timeline_html(posts: list, max_items: int = 6) -> str:
+    """Render a compact, date-stamped list of mentions for use in the HTML email."""
+    items = build_mention_timeline(posts, max_items)
+    if not items:
+        return ""
+    rows = ""
+    for p in items:
+        signal   = p.get("signal", "neutral")
+        date_s   = _fmt_date_short(p.get("date", ""))
+        source   = p.get("source", "📱")
+        snippet  = (p.get("snippet") or "")[:160].strip()
+        url      = p.get("url", "")
+        link     = (f' <a href="{url}" style="color:#0d6efd;font-size:10px;'
+                    f'text-decoration:none" title="source">↗</a>') if url else ""
+        border   = "#dc3545" if signal == "buy" else ("#ffc107" if signal == "warn" else "#dee2e6")
+        bg       = "#fff8f8" if signal == "buy" else "#fafafa"
+        badge    = (" <span style='background:#dc3545;color:#fff;font-size:9px;"
+                    "padding:1px 4px;border-radius:3px'>BUY</span>") if signal == "buy" else ""
+        rows += (
+            f'<div style="border-left:3px solid {border};background:{bg};'
+            f'padding:5px 10px;margin-bottom:4px;border-radius:0 4px 4px 0">'
+            f'<div style="font-size:11px;color:#6c757d;margin-bottom:2px">'
+            f'{source} <b style="color:#343a40">{date_s}</b>{badge}{link}</div>'
+            f'<div style="font-size:12px;color:#495057;font-style:italic;line-height:1.4">'
+            f'"{snippet}"</div></div>'
+        )
+    return rows
+
+
 # ─────────────────────────────────────────────────────────────
 #  OGE filing checker
 # ─────────────────────────────────────────────────────────────
@@ -541,19 +608,19 @@ def format_digest_text(digest):
     if buy_companies:
         lines.append("\n  *** BUY ALERTS ***")
         for ticker, c in sorted(buy_companies, key=lambda x: -x[1]["buy_count"]):
-            best = pick_best_post(c["posts"])
             lines.append(f"\n  [{ticker}] {c['company']}  {fmt_price(prices, ticker)}")
             if c.get("conflict_of_interest") and c.get("holding_info"):
                 h = c["holding_info"]
                 lines.append(f"  COI: Trump holds {h['range']} (bought {h['date']})")
-            if best:
-                lines.append(f"  {best['source']} {best['date']}: \"{best['snippet'][:140]}\"")
-                if best["url"]:
-                    lines.append(f"  {best['url']}")
+            for p in build_mention_timeline(c["posts"], max_items=8):
+                marker = "  ⭐ BUY" if p.get("signal") == "buy" else "      "
+                lines.append(f"  {marker} {p['source']} {p['date']}: \"{p['snippet'][:130]}\"")
+                if p.get("url"):
+                    lines.append(f"          {p['url']}")
     else:
         lines.append(f"\n  No BUY alerts in the last {days} days.")
 
-    # Micro
+    # All companies
     lines.append("\n" + "-" * 62)
     lines.append("  COMPANY MENTIONS")
     lines.append("-" * 62)
@@ -563,12 +630,9 @@ def format_digest_text(digest):
         coi = " [COI]" if c["conflict_of_interest"] else ""
         lines.append(f"\n  {sig}  {c['company']} ({ticker}){coi}  {fmt_price(prices, ticker)}")
         lines.append(f"       Mentions: {len(c['posts'])}  Buy: {c['buy_count']}  Sell/Warn: {c['sell_count']}")
-        best = pick_best_post(c["posts"])
-        if best:
-            lines.append(f"       {best['source']} {best['date']}: \"{best['snippet'][:120]}\"")
-        news_posts = [p for p in c["posts"] if p["source"] == "📰"]
-        if news_posts:
-            lines.append(f"       Media: \"{news_posts[-1]['snippet'][:120]}\"")
+        for p in build_mention_timeline(c["posts"], max_items=6):
+            marker = "⭐" if p.get("signal") == "buy" else "  "
+            lines.append(f"       {marker} {p['source']} {p['date']}: \"{p['snippet'][:115]}\"")
 
     # Portfolio
     lines.append("\n" + "-" * 62)
@@ -640,6 +704,7 @@ def format_digest_html(digest):
                     col = "#198754" if chg_s >= 0 else "#dc3545"
                     price_html += f"<span style='color:{col}'>{'▲' if chg_s>=0 else '▼'}{abs(chg_s):.1f}% since mention</span>"
 
+            # Featured blockquote (best buy signal)
             quote_html = ""
             if best and best.get("snippet") and best["relevance"] >= 40:
                 quote_html = f"""
@@ -652,6 +717,23 @@ def format_digest_html(digest):
                     {f'&nbsp;·&nbsp;<a href="{best["url"]}" style="color:#0d6efd">source</a>' if best.get("url") else ""}
                   </span>
                 </blockquote>"""
+
+            # Full mention timeline (all dates cited)
+            timeline = build_timeline_html(c["posts"], max_items=8)
+            timeline_html = ""
+            if timeline:
+                n_extra = max(0, len(c["posts"]) - 8)
+                extra_note = (f"<div style='font-size:11px;color:#6c757d;margin-top:4px'>"
+                              f"…and {n_extra} more mention(s)</div>") if n_extra else ""
+                timeline_html = f"""
+                <div style='margin-top:12px'>
+                  <div style='font-size:11px;font-weight:bold;color:#6c757d;
+                      text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px'>
+                    All mentions — dated
+                  </div>
+                  {timeline}
+                  {extra_note}
+                </div>"""
 
             coi_html = ""
             if c.get("conflict_of_interest") and COI_REGISTRY.get(ticker):
@@ -680,6 +762,7 @@ def format_digest_html(digest):
                 <div style='margin-bottom:12px'>{price_html}</div>
                 {quote_html}
                 {coi_html}
+                {timeline_html}
                 <div style='background:#f8f9fa;border-radius:6px;padding:12px 16px;
                     font-size:13px;color:#212529;line-height:1.6;margin-top:10px'>
                   <b>Analysis:</b> {analysis}
@@ -701,8 +784,6 @@ def format_digest_html(digest):
         price  = p_info.get("price")
         chg_t  = p_info.get("change_pct_today")
         chg_s  = p_info.get("change_pct_since")
-        best   = pick_best_post(c["posts"])
-        news_p = [p for p in c["posts"] if p["source"] == "📰"]
 
         sig_color = "#dc3545" if c["sell_count"] else "#6c757d"
         sig_label = "📉 WARN" if c["sell_count"] else "📣 MENTION"
@@ -719,22 +800,11 @@ def format_digest_html(digest):
                 col = "#198754" if chg_t>=0 else "#dc3545"
                 price_str += f" <span style='color:{col}'>{'▲' if chg_t>=0 else '▼'}{abs(chg_t):.1f}%</span>"
 
-        best_quote = ""
-        if best and best.get("snippet") and best["relevance"] >= 40:
-            best_quote = (
-                f"<div style='font-style:italic;color:#495057;font-size:13px;"
-                f"border-left:3px solid #dee2e6;padding-left:10px;margin:6px 0'>"
-                f"\"{best['snippet'][:160]}\"</div>"
-            )
-
-        media_quote = ""
-        if news_p:
-            snip = news_p[-1].get("snippet","")[:160]
-            if snip:
-                media_quote = (
-                    f"<div style='font-size:12px;color:#6c757d;margin-top:4px'>"
-                    f"📰 <i>{snip}</i></div>"
-                )
+        # Full dated mention timeline — every occurrence shown with source + date
+        timeline = build_timeline_html(c["posts"], max_items=5)
+        n_extra  = max(0, len(c["posts"]) - 5)
+        extra_note = (f"<div style='font-size:11px;color:#adb5bd;margin-top:2px'>"
+                      f"…+{n_extra} more mention(s)</div>") if n_extra else ""
 
         analysis_short = generate_analysis(ticker, c, prices)
 
@@ -748,11 +818,15 @@ def format_digest_html(digest):
               <span style='background:#f1f3f5;color:{sig_color};padding:2px 8px;
                 border-radius:10px;font-size:11px;font-weight:bold'>{sig_label}</span>
             </div>
+            <div style='font-size:11px;color:#adb5bd;margin-top:4px'>
+              {len(c["posts"])} mention(s)
+            </div>
           </td>
           <td style='padding:14px 16px;vertical-align:top;font-size:13px;color:#212529'>
-            {best_quote}
-            {media_quote}
-            <div style='color:#495057;font-size:12px;margin-top:8px;line-height:1.5'>
+            {timeline}
+            {extra_note}
+            <div style='color:#495057;font-size:12px;margin-top:8px;line-height:1.5;
+                background:#f8f9fa;padding:8px 10px;border-radius:4px'>
               {analysis_short}
             </div>
           </td>
