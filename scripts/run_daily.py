@@ -154,7 +154,14 @@ def build_digest(days, include_prices=True):
     print("[run_daily] Fetching White House speeches...", file=sys.stderr)
     wh_data = run_script("fetch_speeches.py", scan_args) or {"meta": {}, "posts": []}
 
-    all_posts = ts_data.get("posts", []) + wh_data.get("posts", [])
+    print("[run_daily] Fetching financial news headlines (CNBC, Yahoo Finance, Reuters)...", file=sys.stderr)
+    news_data = run_script("fetch_news.py", scan_args) or {"total_matched": 0, "posts": []}
+
+    # Tag news items so they render with the 📰 emoji in digests
+    for post in news_data.get("posts", []):
+        post.setdefault("source", "news")
+
+    all_posts = ts_data.get("posts", []) + wh_data.get("posts", []) + news_data.get("posts", [])
 
     # ---- Collect all company mentions ----
     company_mentions: dict = {}  # ticker -> {company, ticker, posts[], buy_count, sell_count, earliest_date}
@@ -162,7 +169,13 @@ def build_digest(days, include_prices=True):
     for post in all_posts:
         content = post.get("content", "")
         date_str = post.get("created_at") or post.get("date") or ""
-        source_type = "📱" if post.get("source") != "whitehouse_speech" else "🎤"
+        src = post.get("source", "")
+        if src == "whitehouse_speech":
+            source_type = "🎤"
+        elif src == "news":
+            source_type = "📰"
+        else:
+            source_type = "📱"
         url = post.get("url", "")
 
         # Company (micro) mentions
@@ -227,6 +240,7 @@ def build_digest(days, include_prices=True):
         "days": days,
         "ts_meta": ts_data.get("meta", {}),
         "wh_meta": wh_data.get("meta", {}),
+        "news_count": news_data.get("total_matched", 0),
         "company_mentions": company_mentions,
         "price_data": price_data,
         "price_timestamp": price_timestamp,
@@ -242,6 +256,7 @@ def format_digest_text(digest):
     days = digest["days"]
     ts_meta = digest["ts_meta"]
     wh_meta = digest["wh_meta"]
+    news_count = digest.get("news_count", 0)
     companies = digest["company_mentions"]
     prices = digest["price_data"]
     price_ts = digest.get("price_timestamp", "unknown")
@@ -254,6 +269,7 @@ def format_digest_text(digest):
     lines.append(f"  Window: Last {days} days")
     lines.append(f"  📱 Truth Social: {ts_meta.get('total_scanned', '?')} posts scanned")
     lines.append(f"  🎤 WH Speeches: {wh_meta.get('total_scanned', '?')} items scanned")
+    lines.append(f"  📰 News headlines: {news_count} Trump+company stories matched")
     lines.append("=" * 60)
 
     # ---- BUY ALERTS ----
@@ -382,6 +398,7 @@ def format_digest_html(digest):
 <div class="header">
   <h1 style="color:#ff4444;margin:0">📊 TRUMP MARKET ALERT</h1>
   <p style="margin:4px 0;color:#aaa">Daily Digest · {digest['scan_time'][:16].replace('T',' ')} UTC · Last {digest['days']} days</p>
+  <p style="margin:2px 0;color:#888;font-size:11px">📱 {digest['ts_meta'].get('total_scanned','?')} Truth Social &nbsp;·&nbsp; 🎤 {digest['wh_meta'].get('total_scanned','?')} WH Speeches &nbsp;·&nbsp; 📰 {digest.get('news_count',0)} News stories</p>
 </div>
 
 {"<div class='buy-alert'><h2>🚨🚨 BUY ALERTS 🚨🚨</h2><table><tr><th>Company</th><th>Price</th><th>Signals</th><th>COI</th></tr>" + buy_rows + "</table></div>" if buy_rows else "<div class='section'><p>✅ No BUY alerts in this window.</p></div>"}

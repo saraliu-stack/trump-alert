@@ -65,7 +65,7 @@ pip install yfinance
 
 ## Workflow
 
-### Step 1: Fetch ALL sources (run both in parallel)
+### Step 1: Fetch ALL sources (run all three in parallel)
 
 **Source A — Truth Social posts:**
 ```bash
@@ -77,12 +77,21 @@ python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_posts.py" [OPTIO
 python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_speeches.py" [OPTIONS]
 ```
 
+**Source C — Financial news headlines (CNBC, Yahoo Finance, Reuters RSS):**
+```bash
+python "C:\Users\saral\.claude\skills\trump-alert\scripts\fetch_news.py" [OPTIONS]
+```
+Source C catches Trump company mentions that originate from video events, rallies, and
+phone calls where no official WH transcript is published (e.g., the May 8 Dell surge,
+the Feb 19 Rome GA rally). It scans RSS headlines for "Trump praises/touts/says buy X".
+
 Pass through any `--hours`, `--days`, `--ticker`, `--buy-only` flags the user provided.
 
-Both scripts output the same JSON schema. Merge their `posts` arrays before processing.
+All three scripts output the same JSON schema. Merge their `posts` arrays before processing.
 Tag each result with its source type for display:
 - Truth Social posts → prefix alert with 📱 **Truth Social**
 - WH speeches/events → prefix alert with 🎤 **Speech/Event**
+- News headlines → prefix alert with 📰 **News Report**
 
 Each matched item has:
 - `post_id` / `title`, `created_at` / `date`, `content`, `url`, `engagement`
@@ -246,6 +255,7 @@ Always open the response with a summary line before listing alerts:
 🔍 Trump Company Alert Scan — Last {N} hours
    📱 Truth Social: {X} posts scanned
    🎤 Speeches/Events: {Y} items scanned
+   📰 News headlines: {N2} Trump+company stories matched
    ─── {Z} company mentions found  |  {W} BUY alerts ───
    Data freshness: {ARCHIVE_TIMESTAMP}
    ─────────────────────────────────────────────────────
@@ -254,7 +264,8 @@ Always open the response with a summary line before listing alerts:
 If zero mentions found:
 ```
 ✅ No company or ticker mentions found in Trump's last {N} hours.
-   📱 {X} Truth Social posts + 🎤 {Y} speeches/events scanned. Data as of {ARCHIVE_TIMESTAMP}.
+   📱 {X} Truth Social posts + 🎤 {Y} speeches/events + 📰 {N2} news stories scanned.
+   Data as of {ARCHIVE_TIMESTAMP}.
 ```
 
 ---
