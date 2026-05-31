@@ -27,7 +27,6 @@ from html.parser import HTMLParser
 WH_LISTING_URLS = [
     "https://www.whitehouse.gov/remarks/",
     "https://www.whitehouse.gov/briefings-statements/",
-    "https://www.whitehouse.gov/videos/",
 ]
 
 # ---------------------------------------------------------------------------
