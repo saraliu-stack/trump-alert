@@ -149,6 +149,18 @@ WH_SPEECH_WARN_PATTERNS = [
 # Company name → ticker mapping (comprehensive)
 # ---------------------------------------------------------------------------
 
+# Display-name overrides for entries where .title() gives wrong casing.
+# e.g. "ibm".title() == "Ibm", "amd".title() == "Amd"
+_DISPLAY_NAMES: dict[str, str] = {
+    "ibm": "IBM",
+    "amd": "AMD",
+    "djt": "DJT",
+    "jp morgan": "JPMorgan",
+}
+
+def _company_display(name: str) -> str:
+    return _DISPLAY_NAMES.get(name.lower(), name.title())
+
 COMPANY_TICKERS = {
     # Known Trump holdings (always check these)
     "palantir": "PLTR",
@@ -362,7 +374,7 @@ def extract_companies(text: str, buy_patterns: list, warn_patterns: list,
             snippet = snippet_source[start:end].strip()
             signal = detect_signal(text, buy_patterns, warn_patterns)
             hits.append({
-                "company": name.title(),
+                "company": _company_display(name),
                 "ticker": ticker,
                 "signal_type": signal,
                 "context_snippet": snippet,
@@ -373,8 +385,12 @@ def extract_companies(text: str, buy_patterns: list, warn_patterns: list,
 
 def is_trump_related(text: str, speech_mode: bool = False) -> bool:
     """Check whether the story involves Trump making statements."""
+    import re as _re
     low = text.lower()
-    if "trump" not in low:
+    # Use word-boundary match so "trumps" (verb meaning surpasses) does not
+    # trigger Trump detection. "Trump's" still matches because \b fires at
+    # the boundary before the apostrophe.
+    if not _re.search(r"\btrump\b", low):
         return False
     if speech_mode:
         # Need to be about a WH event / speech / public statement

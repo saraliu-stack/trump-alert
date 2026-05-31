@@ -80,6 +80,14 @@ TRUMP_HOLDINGS = {
     "DJT":  {"company": "Trump Media",       "range": "Majority stake",  "date": "Founder"},
 }
 
+_DISPLAY_NAMES: dict[str, str] = {
+    "ibm": "IBM", "amd": "AMD", "gm": "GM", "cvs": "CVS",
+    "djt": "DJT", "jp morgan": "JPMorgan", "at&t": "AT&T",
+}
+
+def _company_display(name: str) -> str:
+    return _DISPLAY_NAMES.get(name.lower(), name.title())
+
 COMPANY_MAP = {
     "apple": "AAPL", "microsoft": "MSFT", "nvidia": "NVDA", "google": "GOOGL",
     "alphabet": "GOOGL", "amazon": "AMZN", "meta": "META", "facebook": "META",
@@ -316,7 +324,7 @@ def find_mentions(text):
         ctx = extract_context(text, name, 200)
         signal = detect_signal(ctx)
         mentions.append({
-                "company": name.title(),
+                "company": _company_display(name),
                 "ticker": ticker,
                 "signal_type": signal,
                 "context_snippet": extract_context(text, name),

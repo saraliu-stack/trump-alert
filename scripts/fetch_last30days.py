@@ -47,6 +47,14 @@ _FALLBACK_PATHS = [
 # ---------------------------------------------------------------------------
 # Company name → ticker (must mirror fetch_posts.py for consistent COI tagging)
 # ---------------------------------------------------------------------------
+_DISPLAY_NAMES: dict[str, str] = {
+    "ibm": "IBM", "amd": "AMD", "gm": "GM",
+    "jp morgan": "JPMorgan", "at&t": "AT&T",
+}
+
+def _company_display(name: str) -> str:
+    return _DISPLAY_NAMES.get(name.lower(), name.title())
+
 COMPANY_TICKERS = {
     "palantir": "PLTR",
     "dell": "DELL",
@@ -196,7 +204,7 @@ def _extract_companies(text: str) -> list[dict]:
             snippet = text[start:end].strip()
             signal = _detect_signal(text)
             hits.append({
-                "company": name.title(),
+                "company": _company_display(name),
                 "ticker": ticker,
                 "signal_type": signal,
                 "context_snippet": snippet,

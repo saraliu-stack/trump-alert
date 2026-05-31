@@ -77,6 +77,20 @@ TRUMP_HOLDINGS = {
 }
 
 # ---------------------------------------------------------------------------
+# Display-name overrides for entries where .title() produces wrong casing.
+_DISPLAY_NAMES: dict[str, str] = {
+    "ibm": "IBM",
+    "amd": "AMD",
+    "gm": "GM",
+    "cvs": "CVS",
+    "djt": "DJT",
+    "jp morgan": "JPMorgan",
+    "at&t": "AT&T",
+}
+
+def _company_display(name: str) -> str:
+    return _DISPLAY_NAMES.get(name.lower(), name.title())
+
 # Major company name → ticker mapping (S&P 500 + notable companies)
 # Extend as needed — lowercase keys for case-insensitive matching
 # ---------------------------------------------------------------------------
@@ -114,7 +128,8 @@ COMPANY_MAP = {
     "home depot": "HD", "lowes": "LOW",
     # Media / Telecom
     "disney": "DIS", "comcast": "CMCSA", "at&t": "T", "verizon": "VZ",
-    "trump media": "DJT", "truth social": "DJT",
+    "trump media": "DJT",
+    # "truth social" removed: platform-name mentions trigger false DJT BUY signals.
     # Auto
     "ford": "F", "gm": "GM", "general motors": "GM", "rivian": "RIVN",
     # Other notable
@@ -247,7 +262,7 @@ def find_mentions(text):
         seen_tickers.add(t)
         signal = detect_signal(extract_context(text, name, 200))
         mentions.append({
-            "company": name.title(),
+            "company": _company_display(name),
             "ticker": ticker,
             "signal_type": signal,
             "context_snippet": extract_context(text, name),
