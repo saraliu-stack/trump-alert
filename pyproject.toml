@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "trump-alert"
+version = "1.0.0"
+description = "Multi-source Trump company mention monitor with MCP server for agent integration"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+# Live stock prices
+prices = ["yfinance>=0.2.0"]
+# MCP server (for Claude Desktop, Cursor, and any MCP-compatible agent)
+mcp = ["mcp>=1.0.0"]
+# Everything
+all = ["yfinance>=0.2.0", "mcp>=1.0.0"]
+
+[project.scripts]
+# Run the MCP server (used in claude_desktop_config.json / cursor mcp.json)
+trump-alert-mcp = "mcp_server:main"
+
+[tool.setuptools.packages.find]
+include = ["trump_alert*"]
+
+[tool.setuptools.package-data]
+trump_alert = ["py.typed"]

@@ -97,16 +97,98 @@ All holdings sourced from the U.S. Office of Government Ethics:
 
 ---
 
-## Quick Start
+## Integration Options
+
+Trump-alert works in three ways — pick whichever fits your setup.
+
+### 1. Claude Code Skill (invoke with `/trump-alert`)
+
+The simplest option. No installation needed beyond cloning the repo into your skills folder.
 
 ```bash
-# Run a spot check (last 48h)
+# Quick spot-check (last 48h)
 /trump-alert
 
-# Run a 30-day digest
+# With options
+/trump-alert --days=30 --buy-only
+/trump-alert --ticker=DELL
+```
+
+### 2. MCP Server (Claude Desktop, Cursor, any MCP agent)
+
+Makes trump-alert available as a tool in any MCP-compatible host. Once configured, just ask your agent "did Trump mention any stocks today?" and it calls the tool automatically.
+
+**Install:**
+```bash
+pip install mcp          # MCP runtime
+pip install yfinance     # optional: live prices
+```
+
+**Configure your agent host:**
+
+```jsonc
+// Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json
+// Cursor:         ~/.cursor/mcp.json
+// Claude Code:    ~/.claude/claude_code_config.json
+{
+  "mcpServers": {
+    "trump-alert": {
+      "command": "python",
+      "args": ["C:/Users/saral/.claude/skills/trump-alert/mcp_server.py"]
+    }
+  }
+}
+```
+
+**Tools exposed to your agent:**
+
+| Tool | What it does |
+|------|-------------|
+| `scan_trump_mentions` | Scan last N hours across all 4 sources; returns BUY alerts + COI flags |
+| `get_trump_digest` | Full 30-day digest with company mentions, live prices, portfolio |
+| `get_trump_portfolio` | Live prices on Trump's OGE-disclosed holdings |
+| `check_conflict` | Check if a specific ticker is in Trump's holdings |
+
+### 3. Python Package (import into any script, notebook, or agent)
+
+```bash
+# Install from local checkout
+pip install -e "C:/Users/saral/.claude/skills/trump-alert[all]"
+```
+
+```python
+from trump_alert import scan, digest, portfolio, TRUMP_HOLDINGS
+
+# Scan last 48h across all sources
+result = scan(hours=48)
+print(f"BUY alerts: {len(result['buy_alerts'])}")
+for alert in result['buy_alerts']:
+    print(f"  {alert['ticker']} — {alert['context_snippet'][:80]}")
+
+# Check if a ticker has a COI
+from trump_alert import CONFLICT_TICKERS
+if "DELL" in CONFLICT_TICKERS:
+    print("Trump holds DELL — any praise is a conflict of interest")
+
+# Full 30-day digest
+d = digest(days=30)
+for ticker, company in d['company_mentions'].items():
+    if company['buy_count'] > 0:
+        print(f"🚨 {ticker}: {company['buy_count']} BUY signals")
+
+# Live portfolio prices
+p = portfolio()
+for ticker, info in p['holdings'].items():
+    print(f"{ticker}: ${info['price']} ({info['change_pct_today']:+.1f}% today)")
+```
+
+### Daily automated digest
+
+```bash
+# Run a 30-day digest (saves to ~/Documents/TrumpAlerts/)
 python scripts/run_daily.py --days=30
 
-# Set up daily email delivery
+# Set up Gmail delivery + Windows Task Scheduler
 python scripts/setup_config.py
 
 # Install price dependency (one-time)

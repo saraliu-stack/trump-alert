@@ -5,3 +5,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.venv/
+venv/
+*.egg
+MANIFEST
+trump_alert/__pycache__/
