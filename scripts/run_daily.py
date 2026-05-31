@@ -367,7 +367,7 @@ def build_digest(days=30, include_prices=True, force_cold=False):
 
     # ── Fetch all sources ───────────────────────────────────
     print("[run_daily] Source A: Truth Social posts...", file=sys.stderr)
-    ts_data = run_script("fetch_posts.py", fetch_args) or {"meta": {}, "posts": []}
+    ts_data = run_script("fetch_posts.py", fetch_args, timeout=120) or {"meta": {}, "posts": []}
 
     print("[run_daily] Source B1: White House transcripts...", file=sys.stderr)
     wh_data = run_script("fetch_speeches.py", fetch_args, timeout=90) or {"meta": {}, "posts": []}
@@ -739,7 +739,7 @@ def format_digest_html(digest):
             best_quote_html = (
                 f"<div style='border-left:3px solid #dee2e6;padding:4px 10px;"
                 f"font-style:italic;font-size:13px;color:#495057;margin-bottom:4px'>"
-                f""{snippet}"</div>"
+                f"&ldquo;{snippet}&rdquo;</div>"
                 f"<div style='font-size:11px;color:#6c757d;margin-bottom:4px'>"
                 f"{best['source']} {date_s}{src_link}</div>"
             )

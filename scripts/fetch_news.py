@@ -84,13 +84,29 @@ WH_SUPPLEMENT_RSS_FEEDS = [
 # ---------------------------------------------------------------------------
 
 # Mode 1: Trump actively promoting / praising a company in general coverage
+#
+# Design rules to avoid false positives:
+#   • "buy" only counts when Trump is the recommender, not when it describes
+#     trade deals ("China will buy 200 planes"), stock purchases ("Trump's buy"),
+#     or IBD technical jargon ("near buy points").
+#   • Use "to buy" (infinitive) instead of bare "buy" for recommendation context.
+#   • Praise verbs (prais*/endors*/touts*) kept but gap capped at 20 chars so
+#     "Trump's Palantir buy before praise fuels ethics debate" does NOT match
+#     while "Trump praises Micron" still does.
 FINANCIAL_BUY_PATTERNS = [
-    r"\btrump\b.{0,60}\b(buy|invest|great company|great investment|going up|strong)\b",
-    r"\btrump\b.{0,60}\b(prais|endors|recommend|told.{0,20}buy|urged.{0,20}buy)\b",
-    r"\b(buy a|go buy|go out and buy)\b.{0,40}\btrump\b",
-    r"\btrump says.{0,60}(buy|invest|great)\b",
-    r"\btrump.{0,30}(boosts?|touts?|pumps?|plugs?|champions?)\b",
-    r"\btrump.{0,30}calls.{0,30}(great|hot|strong|best)\b",
+    # Trump explicitly tells/urges people to buy a stock.
+    # "says/said" intentionally excluded: "Trump says China will buy 200 planes"
+    # (trade deal) also satisfies "says...to buy" and causes false positives.
+    r"\btrump\b.{0,60}\b(told|urge[sd]?|ask[ed]?|recommend\w*|advise[sd]?)\b.{0,50}\bto\s+(buy|invest|purchase)\b",
+    # "go buy" / "go out and buy" — Trump's classic stock-pump phrase
+    r"\btrump\b.{0,120}\bgo(?:\s+out\s+and?)?\s+buy\b",
+    r"\bgo(?:\s+out\s+and?)?\s+buy\b.{0,120}\btrump\b",
+    # Trump praises/endorses/touts — short gap (≤20 chars) so noun forms don't match
+    r"\btrump\b.{0,20}\b(prais\w+|endors\w+|touts?|plugs?\b|hails?\b|promotes?\b|champions?\b|boosts?\b)\b",
+    # "President Trump praised/endorsed" — subject-verb in formal reporting
+    r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|touts?|championed|promoted)\b",
+    # Trump recommends a specific stock/company as investment
+    r"\btrump\b.{0,50}\b(recommend\w+|invest\w+)\b.{0,40}\b(stock|share|compan|firm)\b",
 ]
 
 FINANCIAL_WARN_PATTERNS = [
@@ -101,14 +117,18 @@ FINANCIAL_WARN_PATTERNS = [
 
 # Mode 2: Speech/event-specific — Trump SAID something AT a WH or public event
 WH_SPEECH_BUY_PATTERNS = [
-    # Event-grounded "Trump said X at Y" structures
-    r"\btrump\b.{0,30}\b(said|told|urged|asked|called on|recommended).{0,60}\b(buy|invest|great|purchase)\b",
-    r"\b(at the white house|at a rally|at an event|during.{0,20}speech|during.{0,20}remarks|during.{0,20}press conf|at.{0,20}event).{0,80}\b(buy|invest|praised|compan|stock)\b",
-    r"\btrump\b.{0,60}\b(white house|rally|speech|remarks|event|press conf).{0,60}\b(buy|invest|praised|prais)\b",
-    r"\bpresident trump.{0,60}\b(prais|endors|touts?|promoted|championed)\b",
-    r"\btrump remarks.{0,60}(compan|stock|buy|invest)\b",
-    r"\btrump.{0,20}\bmother.{0,10}day\b.{0,60}(buy|compan|stock|dell|apple|intel)\b",
-    r"\btrump.{0,20}white house.{0,60}(buy|compan|stock|great)\b",
+    # Trump said/urged at an event: requires "to buy/invest" (infinitive form)
+    r"\btrump\b.{0,60}\b(said|told|urged|asked|called\s+on|recommend\w*)\b.{0,60}\bto\s+(buy|invest|purchase)\b",
+    # "go out and buy" at a public event
+    r"\bgo(?:\s+out\s+and?)?\s+buy\b.{0,150}\b(trump|white\s+house|rally|speech)\b",
+    r"\btrump\b.{0,150}\bgo(?:\s+out\s+and?)?\s+buy\b",
+    # Trump praised/endorsed at a public event — short verb gap
+    r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|touts?|promoted|championed)\b",
+    r"\btrump\b.{0,20}\b(prais\w+|endors\w+|touts?)\b.{0,80}\b(compan|stock|invest|firm|product)\b",
+    # Event context + praise language
+    r"\b(white\s+house|rally|speech|remarks|press\s+conf)\b.{0,100}\b(prais\w+|endors\w+|go\s+buy|buy\s+a\b)\b",
+    # Specific known phrasing patterns
+    r"\btrump.{0,20}mother.{0,10}day.{0,60}(buy|compan|stock|dell|apple|intel)\b",
 ]
 
 WH_SPEECH_WARN_PATTERNS = [
@@ -136,7 +156,9 @@ COMPANY_TICKERS = {
     "microsoft": "MSFT",
     "intel": "INTC",
     "trump media": "DJT",
-    "truth social": "DJT",
+    # "truth social" removed: articles using Truth Social as a platform name
+    # (e.g. "Trump praised X on Truth Social") trigger a false DJT BUY signal.
+    # DJT is still caught via "trump media" and direct financial coverage of the stock.
     # Broader market
     "amazon": "AMZN",
     "alphabet": "GOOGL",
@@ -288,16 +310,47 @@ def detect_signal(text: str, buy_patterns: list, warn_patterns: list) -> str:
     return "neutral"
 
 
-def extract_companies(text: str, buy_patterns: list, warn_patterns: list) -> list:
+def _clean_title(title: str) -> str:
+    """
+    Strip trailing source attribution from RSS headlines.
+    Many feeds append ' - Reuters', ' | Yahoo Finance', ' - Investor's Business Daily', etc.
+    Removes the last ' - Source' or ' | Source' segment if it looks like a publication name
+    (≤40 chars, no sentence punctuation inside).
+    """
+    title = title.strip()
+    m = re.search(r'\s+[-|]\s+([^|.\-]{1,40})\s*$', title)
+    if m:
+        title = title[:m.start()].strip()
+    return title
+
+
+def extract_companies(text: str, buy_patterns: list, warn_patterns: list,
+                      title: str = "") -> list:
+    """
+    Find company mentions in text. When a clean title is provided it is used
+    for the snippet (avoids title/description boundary artefacts like 'Euronews Del').
+    """
     low = text.lower()
+    # Use the standalone title for snippets when available — cleaner than
+    # slicing across the title+description boundary.
+    snippet_source = _clean_title(title) if title else text
+
     hits = []
     seen = set()
     for name, ticker in COMPANY_TICKERS.items():
         if name in low and ticker not in seen:
-            idx = low.find(name)
-            start = max(0, idx - 80)
-            end = min(len(text), idx + len(name) + 80)
-            snippet = text[start:end].strip()
+            # Build snippet from clean title if company is found there, else from full text
+            stl = snippet_source.lower()
+            if name in stl:
+                idx = stl.find(name)
+                start = max(0, idx - 60)
+                end = min(len(snippet_source), idx + len(name) + 100)
+            else:
+                idx = low.find(name)
+                start = max(0, idx - 60)
+                end = min(len(text), idx + len(name) + 100)
+                snippet_source = text
+            snippet = snippet_source[start:end].strip()
             signal = detect_signal(text, buy_patterns, warn_patterns)
             hits.append({
                 "company": name.title(),
@@ -378,7 +431,8 @@ def fetch_from_feeds(
                 continue
             seen_links.add(item.link)
 
-            mentions = extract_companies(full_text, buy_patterns, warn_patterns)
+            mentions = extract_companies(full_text, buy_patterns, warn_patterns,
+                                         title=item.title)
             if not mentions:
                 continue
 

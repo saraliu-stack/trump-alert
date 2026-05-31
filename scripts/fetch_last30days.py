@@ -62,7 +62,7 @@ COMPANY_TICKERS = {
     "microsoft": "MSFT",
     "intel": "INTC",
     "trump media": "DJT",
-    "truth social": "DJT",
+    # "truth social" removed — platform-name mentions cause false DJT BUY signals
     "amazon": "AMZN",
     "alphabet": "GOOGL",
     "google": "GOOGL",
