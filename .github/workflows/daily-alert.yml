@@ -1,0 +1,35 @@
+name: Trump Market Alert — Daily Digest
+
+on:
+  schedule:
+    # 11:00 UTC = 7:00 AM EDT (summer) / 8:00 AM EST (winter)
+    - cron: "0 11 * * *"
+  workflow_dispatch:   # lets you trigger a run manually from GitHub UI
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily digest + email
+        env:
+          PYTHONUTF8: "1"
+          SMTP_HOST: smtp.gmail.com
+          SMTP_PORT: "587"
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_TO:  ${{ secrets.ALERT_TO }}
+        run: python scripts/run_daily.py --days=2 --email
