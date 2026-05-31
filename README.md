@@ -22,6 +22,7 @@ A pattern documented in federal ethics filings and major outlets: **Trump public
 |------|----------------|---------|------|
 | May 8, 2026 | "Go out and buy a Dell" (White House event) | DELL | +14.6% intraday, all-time high |
 | May 15, 2026 | "PLTR has great war fighting capabilities" (Truth Social) | PLTR | Reversed 16% freefall |
+| May 15, 2026 | "China agreed to buy 200 Boeing aircraft" (trade deal) | BA | +3% since announcement |
 | Mar 26, 2026 | "One of the hottest companies" (Fox News call) | MU | Jumped |
 | Apr 30, 2026 | "Intel stock continues to rise" (Truth Social) | INTC | +3% after-hours |
 | Apr 9, 2026 | "THIS IS A GREAT TIME TO BUY!!!" (Truth Social) | Market | Surged hours later |
@@ -34,7 +35,7 @@ An [OGE Form 278-T](https://www.cnbc.com/2026/05/15/trump-stock-trade-tech-oge.h
 
 A daily HTML email that includes:
 
-- 🚨 **BUY ALERTS** — companies Trump explicitly praised, with the direct quote and date
+- 🚨 **BUY ALERTS** — companies Trump explicitly praised *or* secured in a trade deal, with the direct quote and date
 - ⚠️ **Conflict-of-interest flags** — cross-referenced against his 12 OGE-disclosed holdings
 - 📈 **Live prices** — % change since first mention, % change today
 - 📰 **Four sources** — Truth Social, White House transcripts, financial news RSS, Reddit community research
@@ -95,7 +96,7 @@ Four sources run in parallel on every digest:
 
 **Sliding-window cache** — the first run fetches 30 days of posts (~90 seconds). Every run after that only fetches the last 25 hours and merges into the cache, keeping warm runs fast (~15 seconds).
 
-**Signal quality** — buy signals require Trump to be the actual recommender ("go out and buy", "praises", "touts", "endorses"). Trade deal coverage ("China agreed to buy 200 planes") and financial jargon ("near buy points") are filtered out.
+**Signal quality** — buy signals fire in two cases: (1) Trump is the direct recommender ("go out and buy", "praises", "touts", "endorses"), or (2) a trade deal results in a country purchasing company goods ("China agreed to buy 200 Boeing aircraft"). Pure financial jargon ("near buy points", "investors agreed to buy") is filtered out.
 
 ---
 
@@ -141,6 +142,9 @@ Yes, it runs every day at 7 AM EDT including weekends. Stock prices show as unav
 
 **How do I adjust the schedule?**
 Edit `.github/workflows/daily-alert.yml` and change the `cron` line. The current value `0 11 * * *` = 11:00 UTC = 7 AM EDT.
+
+**Does it cover trade deals, not just direct stock praise?**
+Yes. When Trump announces a deal where a country agrees to buy company goods (e.g. "China will buy 200 Boeing aircraft"), that fires as a BUY alert — these events move stocks just as much as direct praise. Pure financial jargon like "near buy points" is still filtered out.
 
 **Is the digest always 30 days?**
 Yes by default. The 30-day window means you see the full pattern even if Trump mentioned a company weeks ago. Change `--days=30` in the workflow to `--days=7` if you want a shorter window.
