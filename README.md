@@ -1,5 +1,7 @@
 # trump-alert
 
+> **⚠️ DISCLAIMER:** This tool is for informational purposes only. Nothing here is financial advice. Do not make investment decisions based solely on its output. See the full [Legal Disclaimer](#️-legal-disclaimer) at the bottom of this page.
+
 A Claude Code skill that monitors Trump's Truth Social posts and White House speeches for company/stock ticker mentions, fact-checks claims against reliable financial sources, and delivers formatted alerts.
 
 ---
@@ -130,6 +132,63 @@ Under the [STOCK Act of 2012](https://www.congress.gov/bill/112th-congress/senat
 
 ---
 
-## Disclaimer
+## ⚖️ Legal Disclaimer
 
-For informational purposes only. Not financial advice. Always verify via [SEC.gov](https://www.sec.gov), [OGE filings](https://efts.usoge.gov/EFTS/public/search), [Reuters](https://www.reuters.com), and [AP News](https://apnews.com) before acting on any information produced by this tool.
+> **READ BEFORE USE. BY USING THIS SOFTWARE YOU ACKNOWLEDGE AND ACCEPT THE TERMS BELOW.**
+
+### No Financial Advice
+
+This software and all output it produces — including alerts, summaries, BUY signals, conflict-of-interest notices, stock prices, and any other content — is provided **for informational and educational purposes only**. Nothing in this repository, its scripts, its output, or its documentation constitutes, or should be construed as:
+
+- Investment advice, financial advice, trading advice, or any other type of financial guidance
+- A recommendation or solicitation to buy, sell, hold, or otherwise transact in any security, financial instrument, or asset
+- An endorsement of any company, stock, or investment strategy
+
+**Past price movements following Trump's statements are historical observations only and are not predictive of future results.** Markets can move for many reasons; correlation between a public statement and a price change does not establish causation or guarantee any future outcome.
+
+### No Warranty; Use At Your Own Risk
+
+This software is provided **"AS IS"**, without warranty of any kind, express or implied, including but not limited to warranties of merchantability, fitness for a particular purpose, accuracy, completeness, timeliness, or non-infringement. The authors and contributors:
+
+- Do not guarantee that alerts are complete, accurate, or delivered in time to be actionable
+- Do not guarantee that all Trump statements, posts, or speeches are captured — some events (video-only, private calls, off-the-record remarks) may not appear in the sources this tool monitors
+- Do not guarantee that conflict-of-interest data reflects Trump's current holdings — OGE filings are periodic and may lag actual trades by weeks or months
+- Accept no responsibility for errors, omissions, or inaccuracies in third-party data sources (CNN archive, whitehouse.gov, RSS feeds)
+
+### Limitation of Liability
+
+To the maximum extent permitted by applicable law, the authors, contributors, and maintainers of this software shall not be liable for any direct, indirect, incidental, special, consequential, punitive, or exemplary damages arising from:
+
+- Your use of or reliance on this software or its output
+- Any trading, investment, or financial decision you make based on alerts produced by this tool
+- Financial losses of any kind, including but not limited to lost profits, lost savings, or loss of capital
+- Missed alerts, delayed alerts, or incorrect alerts
+- Any third-party data being inaccurate, incomplete, or unavailable
+
+**You assume full and sole responsibility for any action you take based on this tool's output.**
+
+### No Insider Information
+
+This tool monitors only **publicly available information**: published Truth Social posts, published White House transcripts, public RSS news feeds, and publicly filed OGE disclosures. It does not have access to, and does not purport to provide, any non-public or insider information. Any apparent predictive value derives entirely from publicly observable patterns in public records.
+
+### Not a Trading System
+
+This tool is a **monitoring and research aid**, not an automated trading system. It does not execute trades, connect to any brokerage, or place any orders. Do not build automated trading logic that acts directly on the output of this tool without independent human review and verification.
+
+### Third-Party Sources
+
+This tool aggregates content from third-party sources including CNN, Yahoo Finance, CNBC, Reuters, the White House website, and the U.S. Office of Government Ethics. The authors are not affiliated with any of these organizations. Their content is their own; accuracy and completeness are their responsibility. Always verify any claim via primary sources:
+
+- SEC filings: [sec.gov/cgi-bin/browse-edgar](https://www.sec.gov/cgi-bin/browse-edgar)
+- OGE disclosures: [efts.usoge.gov](https://efts.usoge.gov/EFTS/public/search)
+- White House: [whitehouse.gov/briefings-statements](https://www.whitehouse.gov/briefings-statements/)
+- Reuters: [reuters.com/business](https://www.reuters.com/business/)
+- AP News: [apnews.com/hub/financial-markets](https://apnews.com/hub/financial-markets)
+
+### Open Source License
+
+This software is released under the MIT License. See `LICENSE` for full terms. The MIT License does not limit or modify the disclaimers above — it governs copyright and distribution only.
+
+---
+
+*If you have questions about securities law, conflict-of-interest rules, or the legality of trading around public political statements, consult a licensed attorney or registered financial advisor.*
