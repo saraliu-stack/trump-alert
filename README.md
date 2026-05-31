@@ -3,6 +3,7 @@
 [![Daily Digest](https://github.com/saraliu-stack/trump-alert/actions/workflows/daily-alert.yml/badge.svg)](https://github.com/saraliu-stack/trump-alert/actions/workflows/daily-alert.yml)
 &nbsp;
 [![Use this template](https://img.shields.io/badge/Use_this_template-2ea44f?style=flat-square&logo=github&logoColor=white)](https://github.com/saraliu-stack/trump-alert/generate)
+![GitHub Stars](https://img.shields.io/github/stars/saraliu-stack/trump-alert?style=social)
 
 > **⚠️ Informational only. Not financial advice.** See [Legal Disclaimer](#️-legal-disclaimer).
 
