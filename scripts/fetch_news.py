@@ -280,11 +280,11 @@ def detect_signal(text: str, buy_patterns: list, warn_patterns: list) -> str:
     low = text.lower()
     for pat in buy_patterns:
         if re.search(pat, low):
-            return "BUY"
+            return "buy"
     for pat in warn_patterns:
         if re.search(pat, low):
-            return "WARN"
-    return "MENTION"
+            return "warn"
+    return "neutral"
 
 
 def extract_companies(text: str, buy_patterns: list, warn_patterns: list) -> list:

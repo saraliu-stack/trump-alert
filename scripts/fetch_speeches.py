@@ -16,10 +16,24 @@ import argparse
 import json
 import re
 import sys
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone, timedelta
 from html.parser import HTMLParser
+
+# Hard wall-time budget for the entire script (seconds).
+# run_daily.py gives us 90s; we self-limit to 80s so we always
+# have time to serialize and print results.
+WALL_BUDGET_S = 80
+_START_TIME = time.monotonic()
+
+def _time_left() -> float:
+    return WALL_BUDGET_S - (time.monotonic() - _START_TIME)
+
+def _deadline_ok(need_s: float = 2.0) -> bool:
+    """Return True if there is at least need_s seconds left in the budget."""
+    return _time_left() > need_s
 
 # ---------------------------------------------------------------------------
 # Listing pages to scrape for recent speech links
@@ -39,6 +53,9 @@ BUY_PHRASES = [
     r"\bgreat stock\b", r"\bbullish\b", r"\bsurging\b", r"\bsoaring\b",
     r"\bgo out and buy\b", r"\bcontinues to rise\b", r"\bone of the hottest\b",
     r"\bgreat\b.{0,40}(stock|company|investment)",
+    r"\bis great\b", r"\b's great\b", r"\bbetter than other\b",
+    r"\bamazing company\b", r"\bincredible company\b", r"\bfantastic company\b",
+    r"\bvery successful\b", r"\bhot company\b", r"\bhottest company\b",
 ]
 
 SELL_PHRASES = [
@@ -175,7 +192,11 @@ WH_BOILERPLATE = re.compile(
 )
 
 
-def fetch_url(url, timeout=15):
+def fetch_url(url, timeout=8):
+    """Fetch a URL with a tight per-request timeout."""
+    if not _deadline_ok(need_s=timeout + 1):
+        print(f"[fetch_speeches] wall budget exhausted — skipping {url}", file=sys.stderr)
+        return None, None
     req = urllib.request.Request(url, headers={"User-Agent": "trump-alert-skill/1.0"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -186,10 +207,17 @@ def fetch_url(url, timeout=15):
 
 
 def get_speech_links(cutoff_dt):
-    """Scrape WH listing pages (with pagination) and return speech links within the time window."""
+    """Scrape WH listing pages and return speech links within the time window.
+
+    Limits to 3 pages per listing URL (≈30 speeches each, covers any 30-day
+    window comfortably) and respects the wall-time budget.
+    """
     links = []
     for listing_url in WH_LISTING_URLS:
-        for page in range(1, 8):  # up to 7 pages (~70 speeches) to cover 30-day windows
+        for page in range(1, 4):   # max 3 pages — enough for 30-day windows
+            if not _deadline_ok(need_s=12):
+                print("[fetch_speeches] wall budget low — stopping pagination", file=sys.stderr)
+                return links
             url = listing_url if page == 1 else f"{listing_url}page/{page}/"
             html, _ = fetch_url(url)
             if not html:
@@ -200,7 +228,7 @@ def get_speech_links(cutoff_dt):
             if not new_links:
                 break  # no new content on this page
             links.extend(new_links)
-            # Stop paginating once the oldest link on this page is before our cutoff
+            # Stop paginating once the oldest link is before our cutoff
             dates = [extract_date_from_url(l) for l in new_links]
             dated = [d for d in dates if d]
             if dated and min(dated) < cutoff_dt:
@@ -337,6 +365,10 @@ def main():
     freshness = None
 
     for url in links:
+        if not _deadline_ok(need_s=10):
+            print(f"[fetch_speeches] wall budget low — stopping after {len(results)} speeches", file=sys.stderr)
+            break
+
         dt = extract_date_from_url(url)
         if dt and dt < cutoff:
             continue

@@ -155,18 +155,18 @@ def save_cache(posts, window_days=30):
 # ─────────────────────────────────────────────────────────────
 #  Subprocess runner
 # ─────────────────────────────────────────────────────────────
-def run_script(script_name, extra_args=None):
+def run_script(script_name, extra_args=None, timeout=60):
     cmd = [sys.executable, str(SKILL_DIR / script_name)]
     if extra_args:
         cmd.extend(extra_args)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode == 0 and result.stdout.strip():
             return json.loads(result.stdout)
         print(f"[run_daily] {script_name} stderr: {result.stderr[:300]}", file=sys.stderr)
         return None
     except subprocess.TimeoutExpired:
-        print(f"[run_daily] {script_name} timed out (60s) — skipped", file=sys.stderr)
+        print(f"[run_daily] {script_name} timed out ({timeout}s) — skipped", file=sys.stderr)
         return None
     except Exception as e:
         print(f"[run_daily] {script_name} failed: {e}", file=sys.stderr)
@@ -371,7 +371,7 @@ def build_digest(days=30, include_prices=True, force_cold=False):
     ts_data = run_script("fetch_posts.py", fetch_args) or {"meta": {}, "posts": []}
 
     print("[run_daily] Source B1: White House transcripts...", file=sys.stderr)
-    wh_data = run_script("fetch_speeches.py", fetch_args) or {"meta": {}, "posts": []}
+    wh_data = run_script("fetch_speeches.py", fetch_args, timeout=90) or {"meta": {}, "posts": []}
 
     print("[run_daily] Source B2: Speech news supplement (RSS)...", file=sys.stderr)
     wh_supp = run_script("fetch_news.py", fetch_args + ["--wh-supplement"]) or {"total_matched": 0, "posts": []}
@@ -380,7 +380,7 @@ def build_digest(days=30, include_prices=True, force_cold=False):
     news_data = run_script("fetch_news.py", fetch_args) or {"total_matched": 0, "posts": []}
 
     print("[run_daily] Source D: Community research (Reddit/Fox calls)...", file=sys.stderr)
-    l30d_data = run_script("fetch_last30days.py", fetch_args) or {"total_matched": 0, "posts": []}
+    l30d_data = run_script("fetch_last30days.py", fetch_args, timeout=150) or {"total_matched": 0, "posts": []}
 
     # Tag by source type
     for p in wh_supp.get("posts", []):  p.setdefault("source", "wh_supplement")
@@ -423,7 +423,11 @@ def build_digest(days=30, include_prices=True, force_cold=False):
                 continue
 
             snippet = mention.get("context_snippet", "")[:200]
-            signal  = mention.get("signal_type", "neutral")
+            # Normalize to lowercase — fetch_news / fetch_last30days used to
+            # return uppercase "BUY"/"WARN"/"MENTION"; fetch_posts returns
+            # lowercase. Accept both.
+            signal  = mention.get("signal_type", "neutral").lower()
+            if signal == "mention":   signal = "neutral"
             rel     = relevance_score(snippet, content)
 
             if ticker not in company_mentions:

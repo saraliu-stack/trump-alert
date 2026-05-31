@@ -31,8 +31,22 @@ BUY_PHRASES = [
     r"\bbuy\b", r"\bgreat investment\b", r"\bgoing up\b", r"\bstrong buy\b",
     r"\binvest in\b", r"\byou should own\b", r"\bgreat company\b",
     r"\bgreat stock\b", r"\bbullish\b", r"\bsurging\b", r"\bsoaring\b",
-    r"\bwinning\b", r"\bup\b", r"\bcontinues to rise\b", r"\bwar fighting capabilities\b",
+    r"\bwinning\b", r"\bcontinues to rise\b", r"\bwar fighting capabilities\b",
     r"\bgreat\b.{0,40}(stock|company|investment)",
+    # Explicit buy-signal phrases from known Trump events
+    r"\bgo out and buy\b",           # "go out and buy a Dell"
+    r"\bis great\b",                  # "Micron is great"
+    r"\b's great\b",                  # "Micron's great"
+    r"\bone of the hottest\b",        # "one of the hottest companies"
+    r"\bbetter than other\b",         # "better than other computers"
+    r"\bamazing company\b",
+    r"\bincredible company\b",
+    r"\bfantastic company\b",
+    r"\btremendous company\b",
+    r"\bgreat great\b",
+    r"\bvery successful\b",           # "very successful CEO"
+    r"\bhot company\b",
+    r"\bhottest company\b",
 ]
 
 # ---------------------------------------------------------------------------
@@ -307,9 +321,12 @@ def main():
         # Strip HTML tags (Truth Social sometimes includes them)
         content_plain = re.sub(r"<[^>]+>", " ", content).strip()
         content_plain = re.sub(r"\s+", " ", content_plain)
-        # Remove Trump's standard sign-off "President DJT" before ticker scanning
-        # to avoid false-positive DJT (Trump Media) matches on every post
+        # Remove Trump's signature forms before ticker scanning to avoid
+        # false-positive DJT (Trump Media) matches on every post.
+        # "President DJT" anywhere in text, and bare "DJT" at the very end
+        # of the post (his standard sign-off), are both signatures, not tickers.
         content_for_detection = re.sub(r'\bPresident\s+DJT\b', '', content_plain, flags=re.IGNORECASE)
+        content_for_detection = re.sub(r'\bDJT\s*[!?.]*\s*$', '', content_for_detection.strip())
 
         mentions = find_mentions(content_for_detection)
         if not mentions:

@@ -178,10 +178,10 @@ def _build_query_plan(days: int) -> dict:
 def _detect_signal(text: str) -> str:
     low = text.lower()
     if any(w in low for w in BUY_WORDS):
-        return "BUY"
+        return "buy"
     if any(w in low for w in WARN_WORDS):
-        return "WARN"
-    return "MENTION"
+        return "warn"
+    return "neutral"
 
 
 def _extract_companies(text: str) -> list[dict]:
