@@ -102,16 +102,18 @@ FINANCIAL_BUY_PATTERNS = [
     r"\btrump\b.{0,120}\bgo(?:\s+out\s+and?)?\s+buy\b",
     r"\bgo(?:\s+out\s+and?)?\s+buy\b.{0,120}\btrump\b",
     # Trump praises/endorses/touts — short gap (≤20 chars) so noun forms don't match
-    r"\btrump\b.{0,20}\b(prais\w+|endors\w+|touts?|plugs?\b|hails?\b|promotes?\b|champions?\b|boosts?\b)\b",
+    # Verb stems use \w* to catch all tenses: touts/touted/touting, boosts/boosted, etc.
+    r"\btrump\b.{0,20}\b(prais\w+|endors\w+|tout\w*|plug\w*|hail\w*|promot\w*|champion\w*|boost\w*)\b",
     # "President Trump praised/endorsed" — subject-verb in formal reporting
-    r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|touts?|championed|promoted)\b",
+    r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|tout\w*|champion\w*|promot\w*)\b",
     # Trump explicitly recommends a stock/company — narrow to avoid matching
     # "Trump's investment policy" or "Trump invest[igates]" as false buy signals.
     r"\btrump\b.{0,30}\b(recommend\w*)\b.{0,50}\b(stock|share|compan|firm)\b",
     # Trade deal: a country agreed to buy company goods — "China agreed to buy 200 aircraft"
-    # Requires a country/deal keyword + "agreed to buy" + a quantity, so it won't match
-    # investor-directed buy language or IBD jargon.
-    r"\b(china|japan|europe|eu|india|saudi|uae|uk|canada|mexico|korea|trade\s+deal|trade\s+agreement)\b.{0,80}\b(agreed?\s+to\s+buy|will\s+buy|purchase[sd]?|order\w*)\b.{0,50}\b\d+\b",
+    # Requires a country/deal keyword + explicit agreement verb + a quantity.
+    # "purchase" and bare "order" removed — they fire on negated contexts like
+    # "Beijing won't approve a single H200 purchase" (no agreement = no BUY signal).
+    r"\b(china|japan|europe|eu|india|saudi|uae|uk|canada|mexico|korea|trade\s+deal|trade\s+agreement)\b.{0,80}\b(agreed?\s+to\s+buy|will\s+buy|commit\w*\s+to\s+(buy|purchase))\b.{0,50}\b\d+\b",
     # Broader trade deal: Trump announces deal involving purchases of company products
     r"\btrump\b.{0,80}\b(trade\s+deal|trade\s+agreement|signed\s+a\s+deal)\b.{0,100}\b(buy|purchase|order|aircraft|planes?|products?|equipment|billion)\b",
 ]
@@ -130,14 +132,16 @@ WH_SPEECH_BUY_PATTERNS = [
     r"\bgo(?:\s+out\s+and?)?\s+buy\b.{0,150}\b(trump|white\s+house|rally|speech)\b",
     r"\btrump\b.{0,150}\bgo(?:\s+out\s+and?)?\s+buy\b",
     # Trump praised/endorsed at a public event — short verb gap
-    r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|touts?|promoted|championed)\b",
-    r"\btrump\b.{0,20}\b(prais\w+|endors\w+|touts?)\b.{0,80}\b(compan|stock|invest|firm|product)\b",
+    # Verb stems use \w* to catch all tenses: touted/touting, promoted, championed, etc.
+    r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|tout\w*|promot\w*|champion\w*)\b",
+    r"\btrump\b.{0,20}\b(prais\w+|endors\w+|tout\w*)\b.{0,80}\b(compan|stock|invest|firm|product)\b",
     # Event context + praise language
     r"\b(white\s+house|rally|speech|remarks|press\s+conf)\b.{0,100}\b(prais\w+|endors\w+|go\s+buy|buy\s+a\b)\b",
     # Specific known phrasing patterns
     r"\btrump.{0,20}mother.{0,10}day.{0,60}(buy|compan|stock|dell|apple|intel)\b",
     # Trade deal: country agreed to buy company goods — e.g. "China agreed to buy 200 aircraft"
-    r"\b(china|japan|europe|eu|india|saudi|uae|uk|canada|mexico|korea|trade\s+deal|trade\s+agreement)\b.{0,80}\b(agreed?\s+to\s+buy|will\s+buy|purchase[sd]?|order\w*)\b.{0,50}\b\d+\b",
+    # Bare "purchase" and "order" removed: they fire on negations like "won't approve a purchase".
+    r"\b(china|japan|europe|eu|india|saudi|uae|uk|canada|mexico|korea|trade\s+deal|trade\s+agreement)\b.{0,80}\b(agreed?\s+to\s+buy|will\s+buy|commit\w*\s+to\s+(buy|purchase))\b.{0,50}\b\d+\b",
     r"\btrump\b.{0,80}\b(trade\s+deal|trade\s+agreement|signed\s+a\s+deal)\b.{0,100}\b(buy|purchase|order|aircraft|planes?|products?|equipment|billion)\b",
 ]
 
@@ -349,6 +353,11 @@ def _buy_trigger_snippet(text: str, buy_patterns: list, window: int = 180) -> st
         if m:
             start = max(0, m.start() - 40)
             end   = min(len(text), m.end() + window)
+            # Snap start forward to a word boundary so snippet doesn't begin mid-word
+            if start > 0:
+                boundary = text.rfind(' ', 0, start + 1)
+                if boundary >= 0:
+                    start = boundary + 1
             return text[start:end].strip()
     return None
 
@@ -365,6 +374,40 @@ def _clean_title(title: str) -> str:
     if m:
         title = title[:m.start()].strip()
     return title
+
+
+def _clean_description(description: str, title: str) -> str:
+    """
+    Strip title duplication from RSS item descriptions.
+
+    Google News and Yahoo Finance RSS embed the article title at the start of
+    the <description> field, producing double output like:
+        "Trump says China will buy 200 planes from Boeing ... - PBS
+         Trump says China will buy 200 planes from Boeing, with a possibility..."
+
+    Strategy: compare the first 60 characters of description (lowercased,
+    punctuation-stripped) against the title.  If they overlap significantly,
+    drop everything up through the first sentence boundary or dash/pipe that
+    follows the title text.
+    """
+    if not description or not title:
+        return description
+    # Normalise for comparison
+    norm_title = re.sub(r'[^a-z0-9 ]', '', title.lower())[:60].strip()
+    norm_desc  = re.sub(r'[^a-z0-9 ]', '', description.lower())[:80].strip()
+    # Require at least 30 chars of overlap to act (avoids false positives on
+    # very short shared words like "Trump")
+    if len(norm_title) < 30:
+        return description
+    if norm_desc.startswith(norm_title[:30]):
+        # Find where the duplicated title ends in the original description.
+        # Look for a separator (dash, pipe, newline) or the end of the first sentence.
+        cut_pos = len(norm_title)
+        sep_match = re.search(r'\s*[-|–—]\s*|\n', description[cut_pos - 5:cut_pos + 40])
+        if sep_match:
+            cut_pos = cut_pos - 5 + sep_match.end()
+        description = description[cut_pos:].strip()
+    return description
 
 
 def extract_companies(text: str, buy_patterns: list, warn_patterns: list,
@@ -392,10 +435,20 @@ def extract_companies(text: str, buy_patterns: list, warn_patterns: list,
                 idx = stl.find(name)
                 start = max(0, idx - 60)
                 end = min(len(snippet_source), idx + len(name) + 100)
+                # Snap start to word boundary
+                if start > 0:
+                    boundary = snippet_source.rfind(' ', 0, start + 1)
+                    if boundary >= 0:
+                        start = boundary + 1
             else:
                 idx = low.find(name)
                 start = max(0, idx - 60)
                 end = min(len(text), idx + len(name) + 100)
+                # Snap start to word boundary
+                if start > 0:
+                    boundary = text.rfind(' ', 0, start + 1)
+                    if boundary >= 0:
+                        start = boundary + 1
                 snippet_source = text
             snippet = snippet_source[start:end].strip()
             signal = detect_signal(text, buy_patterns, warn_patterns)
@@ -479,7 +532,9 @@ def fetch_from_feeds(
             continue
 
         for item in parser.items:
-            full_text = f"{item.title} {item.description}"
+            # Strip title duplication injected by Google News / Yahoo RSS
+            clean_desc = _clean_description(item.description, item.title)
+            full_text = f"{item.title} {clean_desc}"
 
             pub_dt = parse_rss_date(item.pub_date)
             if pub_dt and pub_dt < cutoff_dt:

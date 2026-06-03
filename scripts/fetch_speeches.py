@@ -56,6 +56,8 @@ BUY_PHRASES = [
     r"\bis great\b", r"\b's great\b", r"\bbetter than other\b",
     r"\bamazing company\b", r"\bincredible company\b", r"\bfantastic company\b",
     r"\bvery successful\b", r"\bhot company\b", r"\bhottest company\b",
+    # Praise verbs — all tenses: praises/praised/praising, touts/touted, endorses/endorsed, etc.
+    r"\b(prais\w+|endors\w+|tout\w+|hail\w+|champion\w+|promot\w+|plug\w+|boost\w+)\b",
 ]
 
 SELL_PHRASES = [
