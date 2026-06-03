@@ -79,7 +79,50 @@ In your new repo: **Settings → Secrets and variables → Actions → New repos
 2. Click **Trump Market Alert — Daily Digest** → **Run workflow**
 3. Wait ~2 minutes → check your inbox
 
-That's it. The digest runs automatically every morning at 7 AM EDT.
+---
+
+### Step 5 — Fix the schedule (optional but recommended)
+
+GitHub Actions cron jobs on free-tier repos are throttled during peak hours and often run 2–6 hours late. If you want the digest reliably at 7 AM EDT, use a free external trigger:
+
+1. **Create a GitHub Personal Access Token**
+   Go to [github.com/settings/tokens/new](https://github.com/settings/tokens/new) → check only the **`workflow`** scope → generate → copy it.
+
+2. **Sign up at [cron-job.org](https://cron-job.org)** (free, no credit card)
+
+3. **Create the cron job** — Dashboard → Create cronjob:
+
+   | Field | Value |
+   |-------|-------|
+   | URL | `https://api.github.com/repos/YOUR-USERNAME/YOUR-REPO/actions/workflows/daily-alert.yml/dispatches` |
+   | Method | `POST` |
+   | Schedule | Daily at **11:00 UTC** (= 7 AM EDT) |
+
+   Under **Headers**, add:
+   ```
+   Content-Type: application/json
+   Authorization: Bearer YOUR_PAT_HERE
+   ```
+   Under **Body**:
+   ```json
+   {"ref": "main"}
+   ```
+
+4. Click **Test run** → the Actions tab in your repo should show a new run starting within seconds.
+
+GitHub's built-in `0 11 * * *` cron remains as a backup, but cron-job.org is now the primary trigger.
+
+---
+
+### Step 6 — Upgrade dedup quality locally (optional)
+
+The tool ships with a lightweight TF-IDF deduplication engine that runs with no extra downloads. If you run the digest locally and want higher-quality dedup that understands paraphrasing ("go buy Dell" = "Trump urges Dell purchase"), install the semantic backend:
+
+```bash
+pip install sentence-transformers
+```
+
+That's it — the engine detects the library automatically and upgrades on the next run. No config change needed. GitHub Actions continues to use TF-IDF (faster, no model download in CI).
 
 ---
 
@@ -98,13 +141,7 @@ Four sources run in parallel on every digest:
 
 **Signal quality** — buy signals fire in two cases: (1) Trump is the direct recommender ("go out and buy", "praises", "touts", "endorses"), or (2) a trade deal results in a country purchasing company goods ("China agreed to buy 200 Boeing aircraft"). Pure financial jargon ("near buy points", "investors agreed to buy") is filtered out.
 
-**NLP deduplication** — when Trump says something once, dozens of outlets re-quote it in new articles over the following days and weeks. Each new article has a fresh publication date, so without dedup it would appear as a new mention every day. The dedup engine compares every incoming news article against the cache using semantic similarity and silently drops re-quotes of already-seen events, keeping only the original report. Truth Social posts and White House transcripts are never filtered — only RSS news re-tellings are deduplicated.
-
-| Dedup backend | When used | Handles |
-|---------------|-----------|---------|
-| sentence-transformers `all-MiniLM-L6-v2` | Local runs (after `pip install sentence-transformers`) | Paraphrasing across outlets — "go buy Dell" and "Trump urges Dell purchase" are the same event |
-| TF-IDF cosine similarity (scikit-learn) | GitHub Actions CI (no model download needed) | Near-identical wording from different outlets |
-| Jaccard word-overlap | Stdlib fallback if neither library is installed | Obvious duplicates |
+**NLP deduplication** — when Trump says something once, dozens of outlets re-quote it in new articles over the following days and weeks. Each new article has a fresh publication date, so without dedup it would appear as a new mention every day. The dedup engine compares every incoming news article against the cache using semantic similarity and silently drops re-quotes of already-seen events, keeping only the original report. Truth Social posts and White House transcripts are never filtered — only RSS news re-tellings are deduplicated. See [Step 6](#step-6--upgrade-dedup-quality-locally-optional) to enable the full semantic backend locally.
 
 ---
 
