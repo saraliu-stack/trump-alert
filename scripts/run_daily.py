@@ -211,8 +211,13 @@ def relevance_score(snippet: str, content: str = "") -> int:
 def pick_best_post(posts_for_company: list) -> dict | None:
     """
     Return the single most informative post per company.
-    Priority order: BUY signal → Trump's own words (📱 > 🎤) → news → relevance score.
-    Prefers direct Trump quotes over third-party interpretations of the same event.
+
+    Priority order:
+      1. BUY signal > neutral/warn
+      2. Trump's own words: 📱 Truth Social > 🎤 WH transcript > 📰 news
+      3. Earliest date — show the original report, not a weeks-later re-quote.
+         (e.g. the May 8 'go out and buy Dell' story beats a Jun 2 recap.)
+      4. Relevance score as final tiebreaker.
     """
     if not posts_for_company:
         return None
@@ -221,8 +226,15 @@ def pick_best_post(posts_for_company: list) -> dict | None:
         signal_score = 2 if p.get("signal") == "buy" else 0
         src = p.get("source", "")
         source_score = 2 if src == "📱" else (1 if src == "🎤" else 0)
+        # Earlier date ranks higher: negate the YYYYMMDD integer so max() picks
+        # the smallest (oldest) date. Missing date → treated as very recent (low score).
+        date_str = (p.get("date") or "9999-99-99").replace("-", "")
+        try:
+            date_score = -int(date_str)
+        except ValueError:
+            date_score = 0
         rel = relevance_score(p.get("snippet", ""), "")
-        return (signal_score, source_score, rel)
+        return (signal_score, source_score, date_score, rel)
 
     return max(posts_for_company, key=_key)
 
@@ -279,22 +291,27 @@ def _fmt_date_short(date_str: str) -> str:
 
 def _other_dates_html(all_posts: list, best_post) -> str:
     """
-    'Also mentioned: May 13, May 8 (+2 more)' — compact date-only line
-    for secondary mentions so the reader knows the full frequency
-    without reading redundant snippets from news re-tellings.
+    'Also mentioned: May 13, May 8 (+2 more)' — compact linked date list.
+    Each date is a clickable link to that article's source URL.
     """
     other = [p for p in all_posts if p is not best_post and p.get("date")]
     other.sort(key=lambda p: p.get("date", ""), reverse=True)
-    dates, seen = [], set()
+    date_entries, seen = [], set()
     for p in other:
         d = _fmt_date_short(p.get("date", ""))
         if d and d not in seen:
             seen.add(d)
-            dates.append(d)
-    if not dates:
+            url = p.get("url", "")
+            if url:
+                date_entries.append(
+                    f'<a href="{url}" style="color:#adb5bd;text-decoration:underline">{d}</a>'
+                )
+            else:
+                date_entries.append(d)
+    if not date_entries:
         return ""
-    showing = dates[:4]
-    overflow = len(dates) - len(showing)
+    showing = date_entries[:4]
+    overflow = len(date_entries) - len(showing)
     text = ", ".join(showing) + (f" (+{overflow} more)" if overflow else "")
     return (f"<div style='font-size:11px;color:#adb5bd;margin-top:3px'>"
             f"Also mentioned: {text}</div>")
@@ -667,19 +684,23 @@ def format_digest_html(digest):
             # Best Trump quote (one only — direct words preferred over news reports)
             quote_html = ""
             if best and best.get("snippet") and best["relevance"] >= 30:
-                date_s = _fmt_date_short(best.get("date", ""))
-                src_link = (f'&nbsp;·&nbsp;<a href="{best["url"]}" style="color:#0d6efd">source</a>'
-                            if best.get("url") else "")
+                date_s   = _fmt_date_short(best.get("date", ""))
+                best_url = best.get("url", "")
+                src_link = (f'&nbsp;·&nbsp;<a href="{best_url}" style="color:#0d6efd">source</a>'
+                            if best_url else "")
+                # Wrap entire blockquote in a link when a URL is available
+                quote_open  = f'<a href="{best_url}" style="text-decoration:none;color:inherit">' if best_url else ""
+                quote_close = "</a>" if best_url else ""
                 other_dates = _other_dates_html(c["posts"], best)
                 quote_html = f"""
-                <blockquote style='border-left:4px solid #dc3545;margin:12px 0;
+                {quote_open}<blockquote style='border-left:4px solid #dc3545;margin:12px 0;
                     padding:10px 16px;background:#fff5f5;border-radius:0 6px 6px 0;
                     font-style:italic;color:#495057;font-size:14px'>
                   "{best['snippet']}"
                   <br><span style='font-size:11px;color:#6c757d;font-style:normal'>
                     {best['source']} {date_s}{src_link}
                   </span>
-                </blockquote>
+                </blockquote>{quote_close}
                 {other_dates}"""
 
             coi_html = ""
@@ -740,18 +761,25 @@ def format_digest_html(digest):
                 col = "#198754" if chg_t>=0 else "#dc3545"
                 price_str += f" <span style='color:{col}'>{'▲' if chg_t>=0 else '▼'}{abs(chg_t):.1f}%</span>"
 
-        # Single best quote (Trump's own words preferred) + compact date list for others
+        # Single best quote (earliest original report preferred) + linked date list
         best = pick_best_post(c["posts"])
         best_quote_html = ""
         if best and best.get("snippet") and best["relevance"] >= 30:
             date_s   = _fmt_date_short(best.get("date", ""))
-            src_link = (f' <a href="{best["url"]}" style="color:#0d6efd;font-size:10px">↗</a>'
-                        if best.get("url") else "")
+            best_url = best.get("url", "")
+            src_link = (f'&nbsp;·&nbsp;<a href="{best_url}" style="color:#0d6efd;font-size:11px">source</a>'
+                        if best_url else "")
             snippet  = (best.get("snippet") or "")[:150]
+            # Wrap quote in a link when URL is available
+            if best_url:
+                quote_inner = (f'<a href="{best_url}" style="color:inherit;text-decoration:none">'
+                               f'&ldquo;{snippet}&rdquo;</a>')
+            else:
+                quote_inner = f"&ldquo;{snippet}&rdquo;"
             best_quote_html = (
                 f"<div style='border-left:3px solid #dee2e6;padding:4px 10px;"
                 f"font-style:italic;font-size:13px;color:#495057;margin-bottom:4px'>"
-                f"&ldquo;{snippet}&rdquo;</div>"
+                f"{quote_inner}</div>"
                 f"<div style='font-size:11px;color:#6c757d;margin-bottom:4px'>"
                 f"{best['source']} {date_s}{src_link}</div>"
             )
