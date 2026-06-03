@@ -50,9 +50,17 @@ No server. No API keys. Runs free on GitHub Actions.
 
 ### Step 1 — Create your copy
 
+**Option A — Use the template** *(recommended)*
+
 Click **[Use this template](https://github.com/saraliu-stack/trump-alert/generate)** → give it any name → **Create repository**.
 
-> This gives you your own private copy. Your credentials never touch anyone else's repo.
+This creates a clean, unlinked copy with no commit history from this repo. Your secrets and credentials stay entirely in your own repo.
+
+**Option B — Fork**
+
+Click **Fork** at the top of this page. Then go to your fork → **Settings → Actions → General** → select **Allow all actions** → Save.
+
+> GitHub disables Actions by default in forks. Without that one-time step the digest will never run.
 
 ### Step 2 — Get a Gmail App Password
 
