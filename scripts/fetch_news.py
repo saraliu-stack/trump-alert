@@ -105,8 +105,9 @@ FINANCIAL_BUY_PATTERNS = [
     r"\btrump\b.{0,20}\b(prais\w+|endors\w+|touts?|plugs?\b|hails?\b|promotes?\b|champions?\b|boosts?\b)\b",
     # "President Trump praised/endorsed" — subject-verb in formal reporting
     r"\bpresident\s+trump\b.{0,30}\b(prais\w+|endors\w+|touts?|championed|promoted)\b",
-    # Trump recommends a specific stock/company as investment
-    r"\btrump\b.{0,50}\b(recommend\w+|invest\w+)\b.{0,40}\b(stock|share|compan|firm)\b",
+    # Trump explicitly recommends a stock/company — narrow to avoid matching
+    # "Trump's investment policy" or "Trump invest[igates]" as false buy signals.
+    r"\btrump\b.{0,30}\b(recommend\w*)\b.{0,50}\b(stock|share|compan|firm)\b",
     # Trade deal: a country agreed to buy company goods — "China agreed to buy 200 aircraft"
     # Requires a country/deal keyword + "agreed to buy" + a quantity, so it won't match
     # investor-directed buy language or IBD jargon.
@@ -332,6 +333,26 @@ def detect_signal(text: str, buy_patterns: list, warn_patterns: list) -> str:
     return "neutral"
 
 
+def _buy_trigger_snippet(text: str, buy_patterns: list, window: int = 180) -> str | None:
+    """
+    Return a snippet centred on the phrase that actually triggered the BUY signal.
+
+    When the BUY pattern fires on a different sentence from the one that mentions
+    the company name (e.g. pattern fires in the description, but the company
+    appears in the negative headline), showing this phrase tells the user *why*
+    the signal fired instead of showing a misleading negative context.
+    Returns None if no pattern matches (should not happen when signal=='buy').
+    """
+    low = text.lower()
+    for pat in buy_patterns:
+        m = re.search(pat, low)
+        if m:
+            start = max(0, m.start() - 40)
+            end   = min(len(text), m.end() + window)
+            return text[start:end].strip()
+    return None
+
+
 def _clean_title(title: str) -> str:
     """
     Strip trailing source attribution from RSS headlines.
@@ -378,6 +399,16 @@ def extract_companies(text: str, buy_patterns: list, warn_patterns: list,
                 snippet_source = text
             snippet = snippet_source[start:end].strip()
             signal = detect_signal(text, buy_patterns, warn_patterns)
+
+            # When the BUY pattern fires in the article description but the
+            # company name appears in a negative headline, the company-name
+            # window misleads the reader.  Prefer the phrase that actually
+            # triggered the signal so the user sees *why* it fired.
+            if signal == "buy":
+                trigger = _buy_trigger_snippet(text, buy_patterns)
+                if trigger:
+                    snippet = trigger
+
             hits.append({
                 "company": _company_display(name),
                 "ticker": ticker,
