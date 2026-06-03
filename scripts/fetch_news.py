@@ -155,6 +155,7 @@ _DISPLAY_NAMES: dict[str, str] = {
     "ibm": "IBM",
     "amd": "AMD",
     "djt": "DJT",
+    "servicenow": "ServiceNow",
     "jp morgan": "JPMorgan",
 }
 
@@ -360,6 +361,10 @@ def extract_companies(text: str, buy_patterns: list, warn_patterns: list,
     seen = set()
     for name, ticker in COMPANY_TICKERS.items():
         if name in low and ticker not in seen:
+            # "intel" as a lowercase common noun (intelligence community, ex-intel official)
+            # should not match Intel Corp. Require the capitalised form in the original text.
+            if name == "intel" and "Intel" not in text:
+                continue
             # Build snippet from clean title if company is found there, else from full text
             stl = snippet_source.lower()
             if name in stl:

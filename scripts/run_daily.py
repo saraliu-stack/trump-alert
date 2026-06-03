@@ -604,7 +604,7 @@ def format_digest_text(digest):
         for f in new_filings:
             lines.append(f"  {f['approx_date']}: {f['url']}")
     else:
-        lines.append("  No new OGE filings since 2026-04-20.")
+        lines.append("  No new OGE filings detected. Last known: 2026-04-20.")
     for ticker in ["DELL","AAPL","PLTR","NVDA","MSFT","MU","TMO","INTC"]:
         lines.append(f"  {ticker:<6} {fmt_price(prices, ticker)}")
 
@@ -816,9 +816,10 @@ def format_digest_html(digest):
     if new_filings:
         oge_html = f"<div style='background:#d1e7dd;border-radius:6px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#0a3622'>🆕 <b>{len(new_filings)} new OGE filing(s) detected:</b><br>" + "<br>".join(f"<a href='{f['url']}'>{f['approx_date']}</a>" for f in new_filings) + "</div>"
     else:
-        oge_html = "<p style='color:#6c757d;font-size:13px'>No new OGE filings since 2026-04-20. Next filing expected ~May 2026.</p>"
+        oge_html = "<p style='color:#6c757d;font-size:13px'>No new OGE filings detected. Last known filing: 2026-04-20.</p>"
 
-    # ── NVDA watch box ────────────────────────────────────────
+    # ── NVDA watch box (only shown while NVDA has no buy signals yet) ─────────
+    nvda_buy_active = "NVDA" in {t for t, c in buy_companies}
     nvda = prices.get("NVDA", {})
     nvda_price = nvda.get("price", "—")
     nvda_chg   = nvda.get("change_pct_today")
@@ -867,14 +868,15 @@ def format_digest_html(digest):
     {buy_cards_html}
   </td></tr>
 
-  <!-- NVDA WATCHLIST BOX -->
+  <!-- NVDA WATCHLIST BOX — hidden once NVDA has an active buy signal -->
+  {"" if nvda_buy_active else f"""
   <tr><td style="padding:0 24px 4px">
     <div style="background:#e8f4fd;border:1px solid #b6d4fe;border-radius:8px;padding:12px 16px;font-size:13px;color:#084298">
       👀 <b>NVDA — Next Watch:</b> Trump holds $1M–$5M in Nvidia but has made
       <b>zero</b> public statements about it. Every prior holding has been praised within weeks of purchase.
       Current price: <b>${nvda_price:,.2f} {nvda_chg_str}</b>. Any NVDA mention = immediate signal.
     </div>
-  </td></tr>
+  </td></tr>"""}
 
   <!-- COMPANY MENTIONS -->
   <tr><td style="padding:16px 24px 0">

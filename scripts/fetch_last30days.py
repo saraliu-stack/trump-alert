@@ -49,7 +49,7 @@ _FALLBACK_PATHS = [
 # ---------------------------------------------------------------------------
 _DISPLAY_NAMES: dict[str, str] = {
     "ibm": "IBM", "amd": "AMD", "gm": "GM",
-    "jp morgan": "JPMorgan", "at&t": "AT&T",
+    "servicenow": "ServiceNow", "jp morgan": "JPMorgan", "at&t": "AT&T",
 }
 
 def _company_display(name: str) -> str:
@@ -198,6 +198,8 @@ def _extract_companies(text: str) -> list[dict]:
     seen = set()
     for name, ticker in COMPANY_TICKERS.items():
         if name in low and ticker not in seen:
+            if name == "intel" and "Intel" not in text:
+                continue  # "intel" as common noun (intelligence community) — skip
             idx = low.find(name)
             start = max(0, idx - 80)
             end = min(len(text), idx + len(name) + 80)

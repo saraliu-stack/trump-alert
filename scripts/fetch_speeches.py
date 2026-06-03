@@ -82,7 +82,7 @@ TRUMP_HOLDINGS = {
 
 _DISPLAY_NAMES: dict[str, str] = {
     "ibm": "IBM", "amd": "AMD", "gm": "GM", "cvs": "CVS",
-    "djt": "DJT", "jp morgan": "JPMorgan", "at&t": "AT&T",
+    "djt": "DJT", "servicenow": "ServiceNow", "jp morgan": "JPMorgan", "at&t": "AT&T",
 }
 
 def _company_display(name: str) -> str:
@@ -309,6 +309,7 @@ def find_mentions(text):
         "meta":   r'\b(meta\s+(stock|shares|platforms|ai)|buy\s+meta)\b',
         "apple":  r'\b(apple\s+(stock|shares|inc|computer|iphone|ipad|mac)|buy\s+apple|tim\s+cook|apple\s+ceo)\b|tim apple\b',
         "halliburton": r'\b(halliburton\s+(stock|shares|oil|energy)|HAL\b)',
+        "intel":  r'\b(intel\s+(stock|shares|corp|chip|semiconductor|processor|ceo|revenue|earnings|pc|computer|results)|buy\s+intel|intel\s+corporation|INTC)\b',
     }
     for name, ticker in COMPANY_MAP.items():
         if name in NEEDS_CONTEXT:

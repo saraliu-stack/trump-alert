@@ -84,6 +84,7 @@ _DISPLAY_NAMES: dict[str, str] = {
     "gm": "GM",
     "cvs": "CVS",
     "djt": "DJT",
+    "servicenow": "ServiceNow",
     "jp morgan": "JPMorgan",
     "at&t": "AT&T",
 }
@@ -247,6 +248,9 @@ def find_mentions(text):
         "snap":   r'\b(snap\s+(stock|shares|inc)|snapchat\s+stock)\b',
         "meta":   r'\b(meta\s+(stock|shares|platforms|ai)|buy\s+meta)\b',
         "apple":  r'\b(apple\s+(stock|shares|inc|computer|iphone|ipad|mac)|buy\s+apple|tim\s+cook|apple\s+ceo)\b|tim apple\b',
+        # "intel" frequently appears as "intelligence" abbreviation in political/national-security
+        # news (e.g. "ex-intel official", "intel community"). Require Corp/stock context.
+        "intel":  r'\b(intel\s+(stock|shares|corp|chip|semiconductor|processor|ceo|revenue|earnings|pc|computer|results)|buy\s+intel|intel\s+corporation|INTC)\b',
     }
     for name, ticker in COMPANY_MAP.items():
         if name in NEEDS_CONTEXT:
