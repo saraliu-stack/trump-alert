@@ -98,6 +98,14 @@ Four sources run in parallel on every digest:
 
 **Signal quality** — buy signals fire in two cases: (1) Trump is the direct recommender ("go out and buy", "praises", "touts", "endorses"), or (2) a trade deal results in a country purchasing company goods ("China agreed to buy 200 Boeing aircraft"). Pure financial jargon ("near buy points", "investors agreed to buy") is filtered out.
 
+**NLP deduplication** — when Trump says something once, dozens of outlets re-quote it in new articles over the following days and weeks. Each new article has a fresh publication date, so without dedup it would appear as a new mention every day. The dedup engine compares every incoming news article against the cache using semantic similarity and silently drops re-quotes of already-seen events, keeping only the original report. Truth Social posts and White House transcripts are never filtered — only RSS news re-tellings are deduplicated.
+
+| Dedup backend | When used | Handles |
+|---------------|-----------|---------|
+| sentence-transformers `all-MiniLM-L6-v2` | Local runs (after `pip install sentence-transformers`) | Paraphrasing across outlets — "go buy Dell" and "Trump urges Dell purchase" are the same event |
+| TF-IDF cosine similarity (scikit-learn) | GitHub Actions CI (no model download needed) | Near-identical wording from different outlets |
+| Jaccard word-overlap | Stdlib fallback if neither library is installed | Obvious duplicates |
+
 ---
 
 ## Trump's known holdings (conflict-of-interest registry)
@@ -149,18 +157,22 @@ Yes. When Trump announces a deal where a country agrees to buy company goods (e.
 **Is the digest always 30 days?**
 Yes by default. The 30-day window means you see the full pattern even if Trump mentioned a company weeks ago. Change `--days=30` in the workflow to `--days=7` if you want a shorter window.
 
+**Won't the 30-day window cause the same event to be counted every day?**
+No — the NLP deduplication layer catches this. When Trump says "go out and buy Dell" on May 8, the original report is stored. Any later article that re-quotes the same statement (same meaning, even if paraphrased) is silently dropped before saving the cache. You see the event once, not daily. To upgrade to semantic dedup locally: `pip install sentence-transformers`.
+
 ---
 
 ## Scripts reference
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/run_daily.py` | Main orchestrator — fetches all sources, merges cache, builds digest, sends email |
+| `scripts/run_daily.py` | Main orchestrator — fetches all sources, merges cache, deduplicates, builds digest, sends email |
 | `scripts/fetch_posts.py` | Truth Social via CNN live archive |
 | `scripts/fetch_speeches.py` | whitehouse.gov remarks and briefings |
 | `scripts/fetch_news.py` | Financial news RSS + WH speech news supplement |
 | `scripts/fetch_last30days.py` | Reddit RSS community research (falls back gracefully if unavailable) |
 | `scripts/fetch_prices.py` | Live prices via yfinance |
+| `scripts/event_dedup.py` | NLP deduplication engine — removes news re-quotes of the same event (run standalone to inspect your cache) |
 | `scripts/setup_config.py` | Local setup wizard (Gmail + Windows Task Scheduler) |
 
 ---
