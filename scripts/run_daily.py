@@ -396,6 +396,18 @@ def build_digest(days=30, include_prices=True, force_cold=False):
 
     # ── Merge with cache and save ───────────────────────────
     all_raw_posts = cached_posts + new_posts
+
+    # NLP deduplication: drop news articles that re-quote the same Trump
+    # statement under a fresh publish date (e.g. "go out and buy Dell" being
+    # repeated by 10 outlets over 3 weeks). Primary sources (Truth Social,
+    # WH transcripts) are never touched — only news/RSS re-tellings are merged.
+    try:
+        sys.path.insert(0, str(SKILL_DIR))
+        from event_dedup import dedup_posts
+        all_raw_posts = dedup_posts(all_raw_posts, verbose=True)
+    except Exception as _dedup_err:
+        print(f"[run_daily] dedup skipped: {_dedup_err}", file=sys.stderr)
+
     all_raw_posts = save_cache(all_raw_posts, window_days=days)
 
     # ── Aggregate company mentions ──────────────────────────

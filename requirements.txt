@@ -1,1 +1,10 @@
 yfinance>=0.2
+
+# NLP deduplication — removes news re-quotes of the same Trump event.
+# sentence-transformers: semantic similarity (handles paraphrasing across outlets).
+# scikit-learn:          TF-IDF fallback used automatically in GitHub Actions CI
+#                        (avoids the ~90 MB HuggingFace model download per run).
+# Install sentence-transformers locally for higher-quality dedup:
+#   pip install sentence-transformers
+scikit-learn>=1.3
+sentence-transformers>=2.7
