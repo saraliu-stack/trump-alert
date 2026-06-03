@@ -828,6 +828,22 @@ def format_digest_html(digest):
         col = "#198754" if nvda_chg >= 0 else "#dc3545"
         nvda_chg_str = f"<span style='color:{col}'>{'▲' if nvda_chg>=0 else '▼'}{abs(nvda_chg):.1f}% today</span>"
 
+    # Build the watch-box HTML separately to avoid nesting f-strings with
+    # the same triple-quote delimiter (SyntaxError in Python < 3.12).
+    if nvda_buy_active:
+        nvda_watch_html = ""  # hidden — NVDA already in BUY ALERTS
+    else:
+        nvda_watch_html = (
+            "<tr><td style='padding:0 24px 4px'>"
+            "<div style='background:#e8f4fd;border:1px solid #b6d4fe;border-radius:8px;"
+            "padding:12px 16px;font-size:13px;color:#084298'>"
+            f"👀 <b>NVDA — Next Watch:</b> Trump holds $1M–$5M in Nvidia but has made "
+            f"<b>zero</b> public statements about it. Every prior holding has been praised "
+            f"within weeks of purchase. Current price: <b>${nvda_price:,.2f} {nvda_chg_str}</b>."
+            " Any NVDA mention = immediate signal."
+            "</div></td></tr>"
+        )
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -869,14 +885,7 @@ def format_digest_html(digest):
   </td></tr>
 
   <!-- NVDA WATCHLIST BOX — hidden once NVDA has an active buy signal -->
-  {"" if nvda_buy_active else f"""
-  <tr><td style="padding:0 24px 4px">
-    <div style="background:#e8f4fd;border:1px solid #b6d4fe;border-radius:8px;padding:12px 16px;font-size:13px;color:#084298">
-      👀 <b>NVDA — Next Watch:</b> Trump holds $1M–$5M in Nvidia but has made
-      <b>zero</b> public statements about it. Every prior holding has been praised within weeks of purchase.
-      Current price: <b>${nvda_price:,.2f} {nvda_chg_str}</b>. Any NVDA mention = immediate signal.
-    </div>
-  </td></tr>"""}
+  {nvda_watch_html}
 
   <!-- COMPANY MENTIONS -->
   <tr><td style="padding:16px 24px 0">
